@@ -49,12 +49,14 @@ class ShuffleManager extends Logging {
     logInfo("Shuffle dir: " + shuffleDir)
 
     // Add a shutdown hook to delete the local dir
+    // 注册钩子，退出是删除中间文件
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dir") {
       override def run() {
         Utils.deleteRecursively(localDir)
       }
     })
     
+    // 可指定外部已存在的http服务
     val extServerPort = System.getProperty(
       "spark.localFileShuffle.external.server.port", "-1").toInt
     if (extServerPort != -1) {
@@ -68,6 +70,7 @@ class ShuffleManager extends Logging {
         Utils.localIpAddress, extServerPort, extServerPath, localDirUuid)
     } else {
       // Create our own server
+      // 没有外部http服务器提供服务，就起一个http服务，并指定可访问的目录
       server = new HttpServer(localDir)
       server.start()
       serverUri = server.uri

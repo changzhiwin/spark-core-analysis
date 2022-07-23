@@ -9,6 +9,8 @@ import scala.collection.mutable.HashMap
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
+  // 需要理解一下写入过程，再反过来理解；保存文件名的格式
+  // 2022-07-23 16:27:40 理解了write过程，回过头来看一下这个逻辑
   def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
     logInfo("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val ser = SparkEnv.get.serializer.newInstance()
@@ -19,8 +21,11 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
     }
     // 把HashMap的元素转换成一个混乱次序后的集合，增加随机性
     // inputIds表示有多少个输入分片吗？
+    // 举个例子，有助理解: rddA(10个partition).groupBy(5个partition)，那么可以推导如下的信息
+    // inputIds = 10, reduceId是[0, 5)之间的某个值
     for ((serverUri, inputIds) <- Utils.randomize(splitsByUri)) {
       for (i <- inputIds) {
+        // 写入的格式：/tmp/spark-local-${localDirUuid}/shuffle/${shuffleId}/${inputId}/${outputId}
         val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
         var totalRecords = -1
         var recordsProcessed = 0

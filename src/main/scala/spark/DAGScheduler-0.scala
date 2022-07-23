@@ -45,6 +45,7 @@ private trait DAGScheduler extends Scheduler with Logging {
 
   // Must be called by subclasses to report task completions or failures.
   def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any]) {
+    // lock下面有定义
     lock.synchronized {
       val dagTask = task.asInstanceOf[DAGTask[_]]
       eventQueues.get(dagTask.runId) match {
@@ -68,6 +69,7 @@ private trait DAGScheduler extends Scheduler with Logging {
 
   private val lock = new Object          // Used for access to the entire DAGScheduler
 
+  // 记录在运行的task？
   private val eventQueues = new HashMap[Int, Queue[CompletionEvent]]   // Indexed by run ID
 
   val nextRunId = new AtomicInteger(0)
@@ -102,6 +104,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     }
   }
 
+  // 新建Stage
   def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]]): Stage = {
     // Kind of ugly: need to register RDDs with the cache and map output tracker here
     // since we can't do it in the RDD constructor because # of splits is unknown
@@ -115,6 +118,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     stage
   }
 
+  // 查找父Stages
   def getParentStages(rdd: RDD[_]): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
@@ -271,6 +275,7 @@ private trait DAGScheduler extends Scheduler with Logging {
                   logInfo(stage + " finished; looking for newly runnable stages")
                   running -= stage
                   if (stage.shuffleDep != None) {
+                    // 这里是处理shuffle map阶段的逻辑
                     mapOutputTracker.registerMapOutputs(
                       stage.shuffleDep.get.shuffleId,
                       stage.outputLocs.map(_.head).toArray)

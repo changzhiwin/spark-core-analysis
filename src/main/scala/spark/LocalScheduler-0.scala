@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGScheduler with Logging {
   var attemptId = new AtomicInteger(0)
+  // 针对线程池，这里讲的基本够用：https://www.cnblogs.com/shamo89/p/8819473.html
+  // newFixedThreadPool：创建一个定长线程池，可控制线程最大并发数，超出的线程会在队列中等待
   var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
 
   // TODO: Need to take into account stage priority in scheduling
@@ -45,6 +47,8 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
         logInfo("Size of task %d is %d bytes and took %d ms to serialize".format(
             idInJob, bytes.size, timeTaken))
         val deserializedTask = ser.deserialize[Task[_]](bytes, currentThread.getContextClassLoader)
+        // 上面执行了一些序列化、反序列化操作
+        
         val result: Any = deserializedTask.run(attemptId)
 
         // Serialize and deserialize the result to emulate what the mesos

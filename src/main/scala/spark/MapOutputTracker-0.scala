@@ -55,6 +55,10 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
   }
 
   // 注册ShuffledRDD的数据地址
+  // 在DAGScheduler里面newStage方法里调用：shuffleId需要被shuffle write的rdd
+  // 疑问：numMaps应该是被shuffle write的rdd的分区个数才对吧？但看newStage调用的参数有点没明白TODO
+  // 回答：numMaps确实是shuffleId对应rdd的分区个数，new Array[String](numMaps)这个数组存放对应分区数据存放地址
+  // 特别需要注意的是这个数组下标和分区是一一映射，使得在fetch的时候可以直接使用下标作为分区标识！！！
   def registerShuffle(shuffleId: Int, numMaps: Int) {
     if (serverUris.get(shuffleId) != null) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")

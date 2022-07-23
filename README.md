@@ -2,6 +2,13 @@
 深入理解Spark Core，目标是运行自己版本的RDD
 
 # 进展
+
+## 0723
+1，进展较大，基本把整个逻辑都粗略过了一遍
+2，弄得比较清楚地是shuffle write/read 如何衔接起来的逻辑，
+3，弄得不怎么清楚的：多线程、master/worker、DAG/Stage、Cache、序列化具体实现
+
+
 ## 0722
 1，从ShuffledRDD开始往下探索，追到了SimpleShuffleFetcher，查看了读取每个分片的细节；从文件流读取Object，但没有看到写入，猜想应该是DAG阶段写的
 2，MapOutputTracker也是一个核心的数据结构，区分master/worker；里面主要管理shuffle的数据源信息

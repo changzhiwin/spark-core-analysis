@@ -131,6 +131,7 @@ private trait DAGScheduler extends Scheduler with Logging {
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_,_] =>
+              // 这里其实就是切分Stage，有多少个ShuffleDependency就会有多少父Stage
               parents += getShuffleMapStage(shufDep)
             case _ =>
               visit(dep.rdd)
@@ -176,11 +177,14 @@ private trait DAGScheduler extends Scheduler with Logging {
       partitions: Seq[Int],
       allowLocal: Boolean)
       (implicit m: ClassManifest[U]): Array[U] = {
+
+    // 这个方法，Local模式下，应该不存在多线程调用的问题啊。难道是和taskEnded一起来考虑？taskEnded是运行在多线程环境下的
     lock.synchronized {
       val runId = nextRunId.getAndIncrement()
       
       val outputParts = partitions.toArray
       val numOutputParts: Int = partitions.size
+      // 这个是运算的入口，从后往前计算
       val finalStage = newStage(finalRdd, None)
       val results = new Array[U](numOutputParts)
       val finished = new Array[Boolean](numOutputParts)
@@ -202,27 +206,35 @@ private trait DAGScheduler extends Scheduler with Logging {
   
       // Optimization for short actions like first() and take() that can be computed locally
       // without shipping tasks to the cluster.
+      // 本地计算，不派发task到其他进程
       if (allowLocal && finalStage.parents.size == 0 && numOutputParts == 1) {
         logInfo("Computing the requested partition locally")
+        //outputParts = Array[Int]，分区id的列表
         val split = finalRdd.splits(outputParts(0))
         val taskContext = new TaskContext(finalStage.id, outputParts(0), 0)
         return Array(func(taskContext, finalRdd.iterator(split)))
       }
 
       // Register the job ID so that we can get completion events for it
+      // 为这个job新建一个队列
       eventQueues(runId) = new Queue[CompletionEvent]
   
       def submitStage(stage: Stage) {
+        // 这个stage不在等待、以及运行中的队列
         if (!waiting(stage) && !running(stage)) {
           val missing = getMissingParentStages(stage)
           if (missing == Nil) {
             logInfo("Submitting " + stage + ", which has no missing parents")
             submitMissingTasks(stage)
+
+            //标记运行中的队列
             running += stage
           } else {
             for (parent <- missing) {
               submitStage(parent)
             }
+
+            //标记等待队列
             waiting += stage
           }
         }
@@ -236,27 +248,35 @@ private trait DAGScheduler extends Scheduler with Logging {
           for (id <- 0 until numOutputParts if (!finished(id))) {
             val part = outputParts(id)
             val locs = getPreferredLocs(finalRdd, part)
+            // 新建了task
             tasks += new ResultTask(runId, finalStage.id, finalRdd, func, part, locs, id)
           }
         } else {
           for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
             val locs = getPreferredLocs(stage.rdd, p)
+            // 不是finalStage，就说明是shuffle
             tasks += new ShuffleMapTask(runId, stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
           }
         }
         myPending ++= tasks
+        // 这个方法是子类必须实现的，LocalScheduler实现
         submitTasks(tasks, runId)
       }
   
+      // 提交
       submitStage(finalStage)
   
+      // 经过提交，job其实已经拆解完成，由LocalScheduler运行了；下面的工作其实定期检查结果
       while (numFinished != numOutputParts) {
+        // 从runId标识的job队列中获取task完成的情况，如果为空就等待POLL_TIMEOUT这么久。
         val eventOption = waitForEvent(runId, POLL_TIMEOUT)
         val time = System.currentTimeMillis // TODO: use a pluggable clock for testability
   
         // If we got an event off the queue, mark the task done or react to a fetch failure
         if (eventOption != None) {
+          // evt是CompletionEvent对象，含需要运行task的信息
           val evt = eventOption.get
+
           val stage = idToStage(evt.task.stageId)
           pendingTasks(stage) -= evt.task
           if (evt.reason == Success) {
@@ -282,6 +302,7 @@ private trait DAGScheduler extends Scheduler with Logging {
                   }
                   updateCacheLocs()
                   val newlyRunnable = new ArrayBuffer[Stage]
+                  // 一个ShuffleMapTask完成，只有这个依赖的其他Stage就可以运行了！！！
                   for (stage <- waiting if getMissingParentStages(stage) == Nil) {
                     newlyRunnable += stage
                   }
@@ -367,6 +388,7 @@ private trait DAGScheduler extends Scheduler with Logging {
   // Assumes that lock is held on entrance, but will release it to wait for the next event.
   def waitForEvent(runId: Int, timeout: Long): Option[CompletionEvent] = {
     val endTime = System.currentTimeMillis() + timeout   // TODO: Use pluggable clock for testing
+    // runId是job的id标识
     while (eventQueues(runId).isEmpty) {
       val time = System.currentTimeMillis()
       if (time >= endTime) {

@@ -12,11 +12,18 @@ import java.util.LinkedHashMap
 class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
   logInfo("BoundedMemoryCache.maxBytes = " + maxBytes)
 
+  // 不指定最大值，就是用系统设置的计算
   def this() {
     this(BoundedMemoryCache.getMaxBytes)
   }
 
   private var currentBytes = 0L
+  /**
+    * LinkedHashMap(int capacity, float fillRatio, boolean Order)
+    * This constructor is also used to initialize both the capacity and fill ratio 
+    * for a LinkedHashMap along with whether to follow the insertion order or not.
+    * 支持自动扩容
+    */
   private val map = new LinkedHashMap[(Any, Int), Entry](32, 0.75f, true)
 
   override def get(datasetId: Any, partition: Int): Any = {
@@ -33,6 +40,7 @@ class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
   override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     val key = (datasetId, partition)
     logInfo("Asked to add key " + key)
+    // 估算value占用的存储大小
     val size = estimateValueSize(key, value)
     synchronized {
       if (size > getCapacity) {
@@ -69,19 +77,24 @@ class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
    * to make space for a partition from the given dataset ID. If this cannot be done without
    * evicting other data from the same dataset, returns false; otherwise, returns true. Assumes
    * that a lock is held on the BoundedMemoryCache.
+   * 确认是否有足够的内存，来缓存这个rdd
    */
   private def ensureFreeSpace(datasetId: Any, space: Long): Boolean = {
     logInfo("ensureFreeSpace(%s, %d) called with curBytes=%d, maxBytes=%d".format(
       datasetId, space, currentBytes, maxBytes))
+
+    // 下面使用了缓存的经典算法：LRU，注意创建LinkedHashMap时的最后一个参数：Order此时发挥作用了
     val iter = map.entrySet.iterator   // Will give entries in LRU order
     while (maxBytes - currentBytes < space && iter.hasNext) {
       val mapEntry = iter.next()
+      // 注意这个key的组成：rddId + partition，缓存的单元不是rdd，而是partition
       val (entryDatasetId, entryPartition) = mapEntry.getKey
       if (entryDatasetId == datasetId) {
         // Cannot make space without removing part of the same dataset, or a more recently used one
         return false
       }
       reportEntryDropped(entryDatasetId, entryPartition, mapEntry.getValue)
+      // 拆东墙，补西墙
       currentBytes -= mapEntry.getValue.size
       iter.remove()
     }
@@ -102,6 +115,20 @@ object BoundedMemoryCache {
    * Get maximum cache capacity from system configuration
    */
    def getMaxBytes: Long = {
+    /**
+      * 为了理解maxMemory，参考了：
+      * https://stackoverflow.com/questions/3571203/what-are-runtime-getruntime-totalmemory-and-freememory
+      * https://stackoverflow.com/questions/23701207/why-do-xmx-and-runtime-maxmemory-not-agree
+      * https://blog.csdn.net/wisgood/article/details/79850093
+      * https://blog.csdn.net/wgw335363240/article/details/8878644
+      * 我的理解：
+      * java -Xms64m -Xmx1024m FooApp
+      * 参数-Xmx，指定堆内存的申请上限
+      * 参数-Xms，指定启动的时候就要立即申请到的堆内存大小，不指定时，边用边申请，直到-Xmx
+      * maxMemory基本上是和-Xmx相等的（Eden + 2*Survivor + Tenured），有一个Survivor没有算
+      * totalMemory已经申请的总和
+      * freeMemory已经申请，但没有被使用的
+      */
     val memoryFractionToUse = System.getProperty("spark.boundedMemoryCache.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFractionToUse).toLong
   }

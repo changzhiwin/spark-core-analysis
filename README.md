@@ -2,6 +2,10 @@
 深入理解Spark Core，目标是运行自己版本的RDD
 
 # 进展
+## 0725
+1，完整理解MapOutputTracker、CacheTracker，前者用来管理shuffle的元数据，后者管理rdd缓存的元数据
+2，了解LinkedHashMap用于LRU机制
+3，了解maxMemory和-Xmx的关系
 
 ## 0723
 1，进展较大，基本把整个逻辑都粗略过了一遍

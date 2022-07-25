@@ -8,6 +8,16 @@ class Stage(
   
   val isShuffleMap = shuffleDep != None
   val numPartitions = rdd.splits.size
+
+  //loc是什么缩写？location，存放shuffle write的信息
+  /**
+    * outputLocs = 
+      [
+        List[String], // 0
+        ...
+        List[String]  // numPartitions
+      ]
+    */
   val outputLocs = Array.fill[List[String]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 

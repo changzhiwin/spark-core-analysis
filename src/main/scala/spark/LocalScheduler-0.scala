@@ -49,6 +49,7 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
         val deserializedTask = ser.deserialize[Task[_]](bytes, currentThread.getContextClassLoader)
         // 上面执行了一些序列化、反序列化操作
         
+        // 实际运行task的地方
         val result: Any = deserializedTask.run(attemptId)
 
         // Serialize and deserialize the result to emulate what the mesos

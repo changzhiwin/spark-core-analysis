@@ -20,6 +20,16 @@ case object StopCacheTracker extends CacheTrackerMessage
 
 
 class CacheTrackerActor extends DaemonActor with Logging {
+  // value是一个二维数组，保存rdd的分区在哪些host上缓存了；定义的属性和方法，其实都是为了维护好这张表
+  /**
+    *  ----------------------------------------------
+    * | rdd/partition |     part0      | ... | partN |
+    *  ----------------------------------------------
+    * |     rdd0      | [host0, hostN] | ... | [...] |
+    *  ----------------------------------------------
+    * |     rddN      | [host0, host3] | ... | [...] |
+    *  ----------------------------------------------
+    */
   private val locs = new HashMap[Int, Array[List[String]]]
 
   /**
@@ -45,6 +55,7 @@ class CacheTrackerActor extends DaemonActor with Logging {
         case SlaveCacheStarted(host: String, size: Long) =>
           logInfo("Started slave cache (size %s) on %s".format(
             Utils.memoryBytesToString(size), host))
+          //初始化，缓存使用情况
           slaveCapacity.put(host, size)
           slaveUsage.put(host, 0)
           reply('OK)
@@ -63,6 +74,7 @@ class CacheTrackerActor extends DaemonActor with Logging {
           } else {
             logInfo("Cache entry added: (%s, %s) on %s".format(rddId, partition, host))
           }
+          // 一个partition可能存在多个host的情况？TODO
           locs(rddId)(partition) = host :: locs(rddId)(partition)
           reply('OK)
           
@@ -114,6 +126,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   val registeredRddIds = new HashSet[Int]
 
   // Stores map results for various splits locally
+  // keySpace包裹了一层，可能是为了以后使用统一的缓存服务，而不是本地缓存？
   val cache = theCache.newKeySpace()
 
   if (isMaster) {
@@ -123,7 +136,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   } else {
     val host = System.getProperty("spark.master.host")
     val port = System.getProperty("spark.master.port").toInt
-    trackerActor = RemoteActor.select(Node(host, port), 'CacheTracker)
+    trackerActor = RemoteActor.select(Node(host, port), "CacheTracker")
   }
 
   // Report the cache being started.
@@ -196,10 +209,13 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
       // Tell the master that we're doing so
 
       // TODO: fetch any remote copy of the split that may be available
+
+      // 把rdd某个分区的数据真正缓存起来
       logInfo("Computing partition " + split)
       var array: Array[T] = null
       var putResponse: CachePutResponse = null
       try {
+        // 调用了计算逻辑，转换成实际的数组
         array = rdd.compute(split).toArray(m)
         putResponse = cache.put(rdd.id, split.index, array)
       } finally {
@@ -215,6 +231,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
         case CachePutSuccess(size) => {
           // Tell the master that we added the entry. Don't return until it
           // replies so it can properly schedule future tasks that use this RDD.
+          // 完后需要通知master，这片数据有缓存了
           trackerActor !? AddedToCache(rdd.id, split.index, Utils.getHost, size)
         }
         case _ => null
@@ -226,6 +243,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Called by the Cache to report that an entry has been dropped from it
   def dropEntry(datasetId: Any, partition: Int) {
     val (keySpaceId, innerId) = datasetId.asInstanceOf[(Any, Any)]
+    // 注意：这里使用spaceId，没有else逻辑，说明当前版本其实只有一个space
     if (keySpaceId == cache.keySpaceId) {
       // TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
       trackerActor !! DroppedFromCache(innerId.asInstanceOf[Int], partition, Utils.getHost)

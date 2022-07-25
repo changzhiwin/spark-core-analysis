@@ -73,6 +73,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   // Read this RDD; will read from cache if applicable, or otherwise compute
   final def iterator(split: Split): Iterator[T] = {
     if (shouldCache) {
+      // 全局只有这里调用了缓存的逻辑
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split)
     } else {
       compute(split)

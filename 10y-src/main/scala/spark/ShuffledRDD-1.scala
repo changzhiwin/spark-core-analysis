@@ -24,6 +24,7 @@ class ShuffledRDD[K, V, C](
   
   override def preferredLocations(split: Split) = Nil
   
+  // 新建的是Dependency，用的是shuffleId，注意和rddId区分开来
   val dep = new ShuffleDependency(context.newShuffleId, parent, aggregator, part)
   override val dependencies = List(dep)
 

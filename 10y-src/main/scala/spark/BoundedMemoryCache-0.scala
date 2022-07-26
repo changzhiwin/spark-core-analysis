@@ -22,7 +22,8 @@ class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
     * LinkedHashMap(int capacity, float fillRatio, boolean Order)
     * This constructor is also used to initialize both the capacity and fill ratio 
     * for a LinkedHashMap along with whether to follow the insertion order or not.
-    * 支持自动扩容
+    * 支持自动扩容，最后一个参数true访问次序的倒序、flase插入顺序，说明如下：
+    * true is passed for the last access order and false is passed for the insertion order
     */
   private val map = new LinkedHashMap[(Any, Int), Entry](32, 0.75f, true)
 

@@ -139,6 +139,7 @@ private object Accumulators {
   val localAccums = Map[Thread, Map[Long, Accumulable[_,_]]]()
   var lastId: Long = 0
   
+  // 控制并发，目前为止我看到的实现，都是单进程+线程的，没有看到多进程的情况
   def newId: Long = synchronized {
     lastId += 1
     return lastId

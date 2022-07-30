@@ -3,7 +3,7 @@ package xyz.sourcecodestudy.spark.serializer
 import java.nio.ByteBuffer
 import java.io.{OutputStream, InputStream}
 import java.io.{ObjectOutputStream, ObjectInputStream}
-import java.io.{ByteArrayOutputSteam, ByteArrayInputStream}
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
 
 import scala.reflect.ClassTag
 
@@ -18,7 +18,7 @@ class JavaSerializer() extends Serializer {
 private[spark] class JavaSerializerInstance() extends SerializerInstance {
 
   def serializer[T: ClassTag](t: T): ByteBuffer = {
-    val bos = new ByteArrayOutputSteam()
+    val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
     out.close()

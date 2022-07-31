@@ -21,3 +21,19 @@
 1，clone了spark项目
 2，找了一个很早很早的版本，作为理解的起点，commit-id = 5b021ce0990ec675afc6939cc2c06f041c973d17
 3，理解SparkContext、SparkEnv，切入点是ParallelCollection
+
+# 源码疑问
+
+## TaskSetManager.statusUpdate 方法实现问题
+`removeRunningTask` 被多余调用了，taskResultGetter里面会调用`taskSet.handleSuccessfulTask`，这个方法本身会自己调用`removeRunningTask`
+```
+            activeTaskSets.get(taskSetId).foreach { taskSet =>
+              if (state == TaskState.FINISHED) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              }
+            }
+```

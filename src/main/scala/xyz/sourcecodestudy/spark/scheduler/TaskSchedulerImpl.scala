@@ -1,6 +1,11 @@
 package xyz.sourcecodestudy.spark.scheduler
 
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+
 import org.apache.logging.log4j.scala.Logging
+
+import xyz.sourcecodestudy.spark.{TaskEndReason, TaskKilled, ExceptionFailure}
+import xyz.sourcecodestudy.spark.TaskState
 
 class TaskSchedulerImpl(
     val sc: SparkContext,
@@ -35,7 +40,9 @@ class TaskSchedulerImpl(
   }
 
   /**
-    * 触发顺序：SparkContext.runJob-> DAGScheduler.(runJob -> submitJob -> submitStage -> submitMissingTasks) -> TaskScheduler.submitTasks
+    * 触发顺序：SparkContext.runJob -> 
+              DAGScheduler.(runJob -> submitJob -> submitStage -> submitMissingTasks) -> 
+              TaskScheduler.submitTasks
     */
   override def submitTasks(taskSet: TaskSet): Unit = {
 
@@ -48,7 +55,7 @@ class TaskSchedulerImpl(
       // 注意：先忽略复杂的调度实现，只维护一个激活状态的TaskSet集合
     }
 
-    // 触发执行，实际会调用下面的resourceOffers()
+    // 触发执行
     backend.reviveOffers()
   }
   
@@ -60,9 +67,18 @@ class TaskSchedulerImpl(
     }
   }
 
-  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {
+  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
     logger.info(s"Cancelling stage ${stageId}")
-    // TODO
+    
+    activeTaskSets.find(_._2.stageId == stageId).foreach {
+      case (_, tsm) => {
+        tsm.runningTaskSet.foreach { taskId => backend.killTask(taskId, interruptThread) }
+
+        val message = s"Stage ${stageId} was cancelled"
+        tsm.abort(message)
+        logger.info(message)
+      }
+    }
   }
 
   override def stop(): Unit = {
@@ -84,9 +100,25 @@ class TaskSchedulerImpl(
     /**
       * 拿activeTaskSets: HashMap[String, TaskSetManager]实现简单调度
       * key = taskSet.id = stageId + "." + attempt
+      * 我理解taskSet其实是和stage有对应关系的：同一个job里面是一一对应
       * 按照key排序，这样stage的FIFO
       */
-    
+    // 调度的taskSet
+    activeTaskSets.keys.toSeq.sorted.foreach(taskSetId => {
+      val taskSetMgr = activeTaskSets(taskSetId)
+      
+      // 传入可用资源列表，在这些节点上执行
+      shuffledOffers.zipWithIndex { (offer, idx) =>
+
+        for (taskDesc <- taskSetMgr.resourceOffer(offer.executorId, offer.host)) {
+          tasks(idx) += taskDesc
+
+          val taskId = taskDesc.taskId
+          taskIdToTaskSetId(taskId) = taskSetMgr.taskSet.id
+        }
+      }
+    })
+
     tasks
   }
 
@@ -96,27 +128,41 @@ class TaskSchedulerImpl(
     * 
     * 注意：Executor会启多线程来执行Task，会被不同线程回调，所以这个方法务必需要保证线程安全
     */
-  def statusUpdate(tId: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
+  def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
+    //  维护的全局状态
+    //  activeTaskSets: HashMap[String, TaskSetManager]
+    //  taskIdToTaskSetId: HashMap[Long, String]
 
-    var failedExector: Option[String] = None
     synchronized {
       try {
-        taskIdToTaskSetId.get(tId) match {
+        taskIdToTaskSetId.get(taskId) match {
           case Some(taskSetId) =>
             if (TaskState.isFinished(state)) {
-
+              taskIdToTaskSetId.remove(taskId)               // Task成功，移除跟踪
+            }
+            activeTaskSets(taskSetId) match {
+              case Some(taskSetMgr) =>
+                stage match {
+                  case TaskState.FINISHED =>
+                    taskSetMgr.handleSuccessfulTask(taskId, new DirectTaskResult(serializedData, null))
+                  case _                  =>
+                    // 需要反序列化成TaskEndReason对象，当前支持了TaskKilled, ExceptionFailure
+                    // TODO，反序列化有可能失败
+                    val reason = SparkEnv.get.closureSerializer.newInstance()
+                      .deserialize[TaskEndReason](serializedData, Thread.currentThread.getContextClassLoader)
+                    taskSetMgr.handleFailedTask(taskId, state, reason)
+                }
+              case _                => 
+                logger.warn(s"Don't know why: task(${taskId}) success, but not found activeTaskSet by Id(${taskSetId})")
             }
 
           case None            =>
+            logger.warn(s"Don't know why: task(${taskId}) success, but not found taskIdToTaskSetId")
 
         }
       } catche {
         case e: Exception => logger.error(s"Exception in statusUpdate, ${e}")
       }
-    }
-
-    if (failedExector.isDefined) {
-
     }
   }
 

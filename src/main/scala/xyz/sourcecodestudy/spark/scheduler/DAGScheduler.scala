@@ -22,9 +22,9 @@ class DAGScheduler(
   private val nextStageId = new AtomicInteger(0)
 
   // Job Process start 
-  val resultStageToJob = new HashMap[Stage, ActiveJob]
-  val jobIdToActiveJob = new HashMap[Int, ActiveJob]
-  val activeJobs = new HashSet[ActiveJob]
+  val resultStageToJob = new HashMap[Stage, ActiveJob]  // 全局变量
+  val jobIdToActiveJob = new HashMap[Int, ActiveJob]    // 全局变量
+  val activeJobs = new HashSet[ActiveJob]               // 全局变量
 
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -50,8 +50,6 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
 
     // JobSubmitted, need to create new stage
-    // val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
-
     val finalStage = newStage(rdd, partitions.size, None, jobId)
 
     val job = new ActiveJob(jobId, finalStage, func2, partitions)
@@ -69,8 +67,8 @@ class DAGScheduler(
   }
   // Job Process end
 
-  val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
-  val stageIdToJobIds = new HashMap[Int, HashSet[Int]]
+  val jobIdToStageIds = new HashMap[Int, HashSet[Int]]  // 全局变量
+  val stageIdToJobIds = new HashMap[Int, HashSet[Int]]  // 全局变量
 
   private def updateJobIdStageIdMaps(jobId: Int, stage: Stage): Unit = {
     val allStage = stage :: getParentStages(stage.rdd, jobId)
@@ -81,12 +79,71 @@ class DAGScheduler(
     })
   }
 
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob, resultStage: Option[Stage]): Unit = {
+    
+    jobIdToStageIds.get(job.jobId) match {
+      case None                         => logger.error(s"No stages registered for job ${job.jobId}")
+      case Some(emSet) if emSet.isEmpty => logger.error(s"Empty stages registered for job ${job.jobId}")
+      case Some(registeredStages) =>
+        stageIdToJobIds.filter(sId => registeredStages.contains(sId)).foreach {
+          case (stageId, jobSet) =>
+            if (!jobSet.contains(job.jobId)) {
+              logger.error(s"Job ${job.jobId} not registered for stage ${stageId} even though that stage was registered for the job")
+            } else {
+              jobSet -= job.jobId
+              if (jobSet.isEmpty) {
+                // TODO
+              }
+            }
+        }
+    }
+
+    jobIdToStageIds -= job.jobId
+    jobIdToActiveJob -= job.jobId
+    activeJobs -= job
+
+    if (resultStage.isEmpty) {
+
+    }
+  }
+
   // Stage Process start
-  val waitingStages = new HashSet[Stage]
-  val runningStages = new HashSet[Stage]
-  val failedStages = new HashSet[Stage]
-  val stageIdToStage = new HashMap[Int, Stage]
-  val shuffleToMapStage = new HashMap[Int, Stage]
+  val waitingStages = new HashSet[Stage]           // 全局变量
+  val runningStages = new HashSet[Stage]           // 全局变量
+  val failedStages = new HashSet[Stage]            // 全局变量
+  val stageIdToStage = new HashMap[Int, Stage]     // 全局变量
+  val shuffleToMapStage = new HashMap[Int, Stage]  // 全局变量
+
+  // stage 是否依赖 target
+  private def stageDependsOn(stage: Stage, target: Stage): Boolean = {
+
+    val visitedRdds = new HashSet[RDD[_]]
+    //val visitedStages = new HashSet[Stage]
+    def visit(rdd: RDD[_]): Unit = {
+      if (!visitedRdds(rdd)) {
+        visitedRdds += rdd
+        for (dep <- rdd.dependencies) {
+          dep match {
+            case shufDep: ShuffleDependency[_, _] =>
+              val mapStage = getShuffleMapStage(shufDep, stage.jobId)
+              if (!mapStage.isAvailable) {
+                //visitedStages += mapStage
+                visit(mapStage.rdd)
+              }
+            case narrowDep: NarrowDependency[_]   =>
+              visit(narrowDep.rdd)
+          }
+        }
+      }
+    }
+
+    (stage == target) match {
+      case false =>
+        visit(stage.rdd)
+        visitedRdds.contains(target.rdd)
+      case true  => true
+    }
+  }
 
   private def getShuffleMapStage(shuffleDep: ShuffleDependency[_, _], jobId: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
@@ -170,9 +227,11 @@ class DAGScheduler(
 
   // submitStage为什么先要调这一步，没看懂？？？返回的是jobId
   private def activeJobForStage(stage: Stage): Option[Int] = {
+    // 找到这个stage关联的所有jobId
     if (stageIdToJobIds.contains(stage.id)) {
-      //jobId 是从小到大自增的，这里排序难道是考虑依赖？
+      // 把jobId从小到大排序
       val jobsThatUseStage: Array[Int] = stageIdToJobIds(stage.id).toArray.sorted
+      // 找到第一个jobId处于jobIdToActiveJob中的job
       jobsThatUseStage.find(jobIdToActiveJob.contains)
     } else {
       None
@@ -200,7 +259,7 @@ class DAGScheduler(
   def submitStage(stage: Stage): Unit = {
     activeJobForStage(stage) match {
       case Some(jobId) => {
-        logger.info(s"submitStage(${stage})")
+        logger.info(s"submitStage(${stage}) in jobId ${jobId}")
         if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
           // 查找依赖的Stage，是否有未完成的
           val missing = getMissingParentStages(stage).sortBy(_.id)
@@ -224,7 +283,7 @@ class DAGScheduler(
   // Stage Process end
 
   // Task Process start
-  val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]
+  val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]  // 全局变量
 
   def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     val myPending = pendingTasks.getOrUpdate(stage, new HashSet[Task[_]])
@@ -253,8 +312,86 @@ class DAGScheduler(
       result: Any,
       accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo): Unit = {
+    // 维护的清单：
+    // 1,  pendingTasks: HashMap[Stage, HashSet[Task[_]]]   需要更新管理，checked
+    // 2,  waitingStages: HashSet[Stage]                    维护方: submitWaitingStages
+    // 3,  runningStages: HashSet[Stage]                    需要更新管理，checked
+    // 4,  failedStages: HashSet[Stage]                     维护方: resubmitFailedStages
+    // 5,  stageIdToStage: HashMap[Int, Stage]              维护方: newStage会建立id到对象的引用
+    // 6,  shuffleToMapStage: HashMap[Int, Stage]           维护方: shuffleId和stage的映射，是stageIdToStage的子集
+    // 7,  jobIdToStageIds: HashMap[Int, HashSet[Int]]
+    // 8,  stageIdToJobIds: HashMap[Int, HashSet[Int]]
 
+    // 9,  resultStageToJob: HashMap[Stage, ActiveJob]      维护方: submitJob里面建立了stage/jobId/job初始关系
+    // 10, jobIdToActiveJob: HashMap[Int, ActiveJob]        需要更新管理
+    // 11, activeJobs: HashSet[ActiveJob]                   需要更新管理
+    
+    // 问题：如何确定一个Stage完成了？ 如何确定一个Job完成了？
     //CompletionEvent(task, reason, result, accumUpdates, taskInfo)
+    val stageId = task.stageId
+    val stage = stageIdToStage(stageId)
+
+    reason match {
+      case Success =>
+        logger.info(s"Completed ${task}")
+        pendingTasks(stage) -= task
+
+        task match {
+          case rt: ResultTask[_, _] =>
+            resultStageToJob.get(stage) match {
+              case Some(job) =>
+                if (!job.finished(rt.outputId)) {
+                  job.finished(rt.outputId) = true
+                  job.numFinished += 1
+
+                  // 如果这个job完成了
+                  if (job.numFinished == job.numPartitions) {
+                    runningStages -= stage
+                    // TODO cleanupStateForJobAndIndependentStages
+                    cleanupStateForJobAndIndependentStages(job, Some(stage))
+                  }
+                }
+              case None      =>
+                logger.info(s"Ignoring result from ${rt} because its job has finished")
+            }
+          case smt: ShuffleMapTask  =>
+        }
+      case _       =>
+
+    }
+    submitWaitingStages()
+  }
+
+  def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {
+    submitWaitingStages()
+  }
+
+  def taskGettingResult(taskInfo: TaskInfo): Unit = {
+    submitWaitingStages()
+  }
+
+  // 查找失败的Stage，以及依赖该Stage的Stage，逐一取消task的运行
+  def taskSetFailed(taskSet: TaskSet, message: String): Unit = {
+
+    val stageId = taskSet.stageId
+
+    // 只处理注册过的
+    if (stageIdToStage.contains(stageId)) {
+      val failedStage = stageIdToStage(stageId).get
+      val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
+
+      for (resultStage <- dependentStages) {
+        val job = resultStageToJob(resultStage)
+        val stages = jobIdToStageIds(job.jobId)
+
+        for (sId <- stages) {
+          val stage = stageIdToStage(sId)
+          if (runningStages.contains(stage)) {
+            taskScheduler.cancelTasks(sId, true)
+          }
+        }
+      }
+    }
   }
   // Task Process end
 }

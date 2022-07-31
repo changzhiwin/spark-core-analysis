@@ -39,6 +39,7 @@ class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
     if (TaskState.isFinished(state)) {
       freeCores += 1
       // 疑问：不清楚为啥这里调用
+      // 回答：一个任务完成，释放了资源，可以申请再次执行了
       reviveOffers()
     }
   }

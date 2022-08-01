@@ -2,6 +2,8 @@ package xyz.sourcecodestudy.spark.scheduler
 
 import java.nio.ByteBuffer
 
+import xyz.sourcecodestudy.spark.SparkEnv
+
 sealed trait TaskResult[T]
 
 // blockId mock, TODO

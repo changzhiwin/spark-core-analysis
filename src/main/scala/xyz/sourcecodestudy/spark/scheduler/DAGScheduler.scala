@@ -79,8 +79,12 @@ class DAGScheduler(
     })
   }
 
+  // 整个状态管理逻辑，目前的理解还是有些困惑的。
   private def cleanupStateForJobAndIndependentStages(job: ActiveJob, resultStage: Option[Stage]): Unit = {
-    
+    /**
+     * 找job对应记录过stage集合registeredStages
+     * 然后在stage和job的映射里面，使用registeredStages过滤，感觉像double check
+     */
     jobIdToStageIds.get(job.jobId) match {
       case None                         => logger.error(s"No stages registered for job ${job.jobId}")
       case Some(emSet) if emSet.isEmpty => logger.error(s"Empty stages registered for job ${job.jobId}")
@@ -90,9 +94,36 @@ class DAGScheduler(
             if (!jobSet.contains(job.jobId)) {
               logger.error(s"Job ${job.jobId} not registered for stage ${stageId} even though that stage was registered for the job")
             } else {
+              // 该job完成了
               jobSet -= job.jobId
               if (jobSet.isEmpty) {
-                // TODO
+                for (stage <- stageIdToStage.get(stageId)) {
+                  if (runningStages.contains(stage)) {
+                    logger.info(s"Removing running stage ${stageId}")
+                    runningStages -= stage
+                  }
+
+                  // TODO shuffleToMapStage
+
+                  if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
+                    logger.debug(s"Removing pending status for stage ${stageId}")
+                  }
+                  pendingTasks -= stage
+
+                  if (waitingStages.contains(stage)) {
+                    logger.debug(s"Removing stage ${stageId} from waiting set.")
+                    waitingStages -= stage
+                  }
+
+                  if (failedStages.contains(stage)) {
+                    logger.debug(s"Removing stage ${stageId} from failed set.")
+                    failedStages -= stage
+                  }
+                } // End for
+
+                stageIdToStage -= stageId
+                stageIdToJobIds -= stageId
+                logger.debug(s"After removal of stage ${stageId}, remaining stages = ${stageIdToStage.size}") 
               }
             }
         }
@@ -103,7 +134,14 @@ class DAGScheduler(
     activeJobs -= job
 
     if (resultStage.isEmpty) {
-
+      // 通过stage查找ActiveJob，理论上应该只有一个
+      val resultStageForJob = resultStageToJob.keySet.filter(stage => resultStageToJob(stage).jobId == job.id)
+      if (resultStageForJob.size != 1) {
+        logger.warn(s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
+      }
+      resultStageToJob --= resultStageForJob
+    } else {
+      resultStageToJob -= resultStage.get
     }
   }
 
@@ -319,14 +357,18 @@ class DAGScheduler(
     // 4,  failedStages: HashSet[Stage]                     维护方: resubmitFailedStages
     // 5,  stageIdToStage: HashMap[Int, Stage]              维护方: newStage会建立id到对象的引用
     // 6,  shuffleToMapStage: HashMap[Int, Stage]           维护方: shuffleId和stage的映射，是stageIdToStage的子集
-    // 7,  jobIdToStageIds: HashMap[Int, HashSet[Int]]
-    // 8,  stageIdToJobIds: HashMap[Int, HashSet[Int]]
+    // 7,  jobIdToStageIds: HashMap[Int, HashSet[Int]]      check, cleanupStateForJobAndIndependentStages
+    // 8,  stageIdToJobIds: HashMap[Int, HashSet[Int]]      check, cleanupStateForJobAndIndependentStages
 
     // 9,  resultStageToJob: HashMap[Stage, ActiveJob]      维护方: submitJob里面建立了stage/jobId/job初始关系
-    // 10, jobIdToActiveJob: HashMap[Int, ActiveJob]        需要更新管理
-    // 11, activeJobs: HashSet[ActiveJob]                   需要更新管理
+    // 10, jobIdToActiveJob: HashMap[Int, ActiveJob]        需要更新管理，check
+    // 11, activeJobs: HashSet[ActiveJob]                   需要更新管理，check
     
     // 问题：如何确定一个Stage完成了？ 如何确定一个Job完成了？
+    // 回答：
+    // 每一个ResultTask完，表示一个分区任务完成，看是否完成了所有分区的计算；
+    // 并且resultStage是和AciveJob一一对应的，依赖的Stage都是ShuffleMapTask
+
     //CompletionEvent(task, reason, result, accumUpdates, taskInfo)
     val stageId = task.stageId
     val stage = stageIdToStage(stageId)
@@ -344,10 +386,9 @@ class DAGScheduler(
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
 
-                  // 如果这个job完成了
+                  // 如果这个job完成了，对全局状态进行维护
                   if (job.numFinished == job.numPartitions) {
                     runningStages -= stage
-                    // TODO cleanupStateForJobAndIndependentStages
                     cleanupStateForJobAndIndependentStages(job, Some(stage))
                   }
                 }

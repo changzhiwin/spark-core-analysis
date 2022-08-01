@@ -7,12 +7,17 @@ import scala.collection.mutable.HashSet
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{TaskEndReason, Success, TaskKilled, ExceptionFailure}
-import xyz.sourcecodestudy.spark.TaskState
+import xyz.sourcecodestudy.spark.TaskState.TaskState
+import xyz.sourcecodestudy.spark.SparkEnv
 
 class TaskSetManager(
     sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     maxTaskFailures: Int) extends Logging {
+
+  // Serializer for closures and tasks.
+  val env = SparkEnv.get
+  val ser = env.closureSerializer.newInstance()
 
   // Vals
   val tasks = taskSet.tasks
@@ -87,7 +92,7 @@ class TaskSetManager(
             val info = new TaskInfo(taskId, index, execId, host)
             taskInfos(taskId) = info
 
-            val serializedTask = Task.serializeWithDependencies(task)
+            val serializedTask = Task.serializeWithDependencies(task, ser)
             addRunningTask(taskId)
 
             val taskName = s"task ${taskSet.id}:${taskId}:${index}"

@@ -1,11 +1,16 @@
 package xyz.sourcecodestudy.spark.scheduler
 
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
+
+import scala.util.Random
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{TaskEndReason, TaskKilled, ExceptionFailure}
-import xyz.sourcecodestudy.spark.TaskState
+import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv, TaskState}
+import xyz.sourcecodestudy.spark.TaskState.TaskState
 
 class TaskSchedulerImpl(
     val sc: SparkContext,
@@ -108,7 +113,7 @@ class TaskSchedulerImpl(
       val taskSetMgr = activeTaskSets(taskSetId)
       
       // 传入可用资源列表，在这些节点上执行
-      shuffledOffers.zipWithIndex { (offer, idx) =>
+      shuffledOffers.zipWithIndex.foreach { (offer, idx) =>
 
         for (taskDesc <- taskSetMgr.resourceOffer(offer.executorId, offer.host)) {
           tasks(idx) += taskDesc
@@ -119,7 +124,7 @@ class TaskSchedulerImpl(
       }
     })
 
-    tasks
+    tasks.map(t => t.toSeq)
   }
 
   /**
@@ -140,7 +145,7 @@ class TaskSchedulerImpl(
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetId.remove(taskId)               // Task成功，移除跟踪
             }
-            activeTaskSets(taskSetId) match {
+            activeTaskSets.get(taskSetId) match {
               case Some(taskSetMgr) =>
                 stage match {
                   case TaskState.FINISHED =>
@@ -160,7 +165,7 @@ class TaskSchedulerImpl(
             logger.warn(s"Don't know why: task(${taskId}) success, but not found taskIdToTaskSetId")
 
         }
-      } catche {
+      } catch {
         case e: Exception => logger.error(s"Exception in statusUpdate, ${e}")
       }
     }

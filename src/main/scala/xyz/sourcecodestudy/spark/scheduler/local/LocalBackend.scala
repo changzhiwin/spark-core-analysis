@@ -2,7 +2,7 @@ package xyz.sourcecodestudy.spark.scheduler.local
 
 import java.nio.ByteBuffer
 
-import xyz.sourcecodestudy.spark.{TaskState}
+import xyz.sourcecodestudy.spark.TaskState.TaskState
 import xyz.sourcecodestudy.spark.executor.Executor
 import xyz.sourcecodestudy.spark.scheduler.SchedulerBackend
 

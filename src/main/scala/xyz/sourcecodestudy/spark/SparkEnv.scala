@@ -2,7 +2,8 @@ package xyz.sourcecodestudy.spark
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.util.Utils
+import xyz.sourcecodestudy.spark.serializer.Serializer
+import xyz.sourcecodestudy.spark.util.Utils
 
 class SparkEnv(
     val serializer: Serializer,

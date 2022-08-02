@@ -4,11 +4,11 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.{TaskEndReason, TaskKilled, ExceptionFailure}
+import xyz.sourcecodestudy.spark.{TaskEndReason} /* , TaskKilled, ExceptionFailure */
 import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskState.TaskState
 
@@ -32,11 +32,11 @@ class TaskSchedulerImpl(
   val nextTaskId = new AtomicLong(0)
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
-  private var dagScheduler: DAGScheduler = null
+  var dagScheduler: DAGScheduler = null
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = this.dagScheduler = dagScheduler
 
-  private var backend: SchedulerBackend = null
-  def initialze(backend: SchedulerBackend): Unit = {
+  var backend: SchedulerBackend = null
+  def initialize(backend: SchedulerBackend): Unit = {
     this.backend = backend
   }
 
@@ -113,7 +113,7 @@ class TaskSchedulerImpl(
       val taskSetMgr = activeTaskSets(taskSetId)
       
       // 传入可用资源列表，在这些节点上执行
-      shuffledOffers.zipWithIndex.foreach { (offer, idx) =>
+      shuffledOffers.zipWithIndex.foreach { case (offer, idx) =>
 
         for (taskDesc <- taskSetMgr.resourceOffer(offer.executorId, offer.host)) {
           tasks(idx) += taskDesc
@@ -142,12 +142,14 @@ class TaskSchedulerImpl(
       try {
         taskIdToTaskSetId.get(taskId) match {
           case Some(taskSetId) =>
+            // Kill/Exception/Success都属于完成的状态
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetId.remove(taskId)               // Task成功，移除跟踪
             }
             activeTaskSets.get(taskSetId) match {
               case Some(taskSetMgr) =>
-                stage match {
+                state match {
+                  // 无异常，运行完成
                   case TaskState.FINISHED =>
                     taskSetMgr.handleSuccessfulTask(taskId, new DirectTaskResult(serializedData, null))
                   case _                  =>

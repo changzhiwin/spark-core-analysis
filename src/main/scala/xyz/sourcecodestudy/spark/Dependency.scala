@@ -1,10 +1,11 @@
 package xyz.sourcecodestudy.spark
 
 import xyz.sourcecodestudy.spark.rdd.RDD
+import xyz.sourcecodestudy.spark.serializer.Serializer
 
 abstract class Dependency[T](val rdd: RDD[T]) extends Serializable
 
-abstract class NarrowDependency[T](rdd: RDD[T]) extends RDD[T] {
+abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency[T](rdd) {
 
   def getParents(partitionId: Int): Seq[Int]
 
@@ -12,10 +13,11 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends RDD[T] {
 
 // Upper type bounds specify that a type must be a subtype of another type
 class ShuffleDependency[K, V](
-    rdd: RDD[_ <: Product2[K, V]],
-    partitioner: Partitioner,
-    serializer: Serializer = null)
-  extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
+    rdd: RDD[Product2[K, V]],
+    val partitioner: Partitioner,
+    val serializer: Serializer = null)
+  extends Dependency(rdd) {
+  //extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffledId()
 

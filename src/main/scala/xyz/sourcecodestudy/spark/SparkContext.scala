@@ -6,7 +6,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.rdd.ParallelCollectionRDD
+import scala.reflect.ClassTag
+
+import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD}
+import xyz.sourcecodestudy.spark.scheduler.{TaskScheduler, TaskSchedulerImpl, DAGScheduler}
+import xyz.sourcecodestudy.spark.scheduler.local.LocalBackend
+import xyz.sourcecodestudy.spark.util.ClosureCleaner
 
 class SparkContext(config: SparkConf) extends Logging {
 
@@ -14,7 +19,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val conf = config.clone()
 
-  val master = conf.get("spark.master")
+  val master = conf.get("spark.master", "local-master")
   
   val isLocal = master.startsWith("local")
 
@@ -30,6 +35,11 @@ class SparkContext(config: SparkConf) extends Logging {
   val dagScheduler: DAGScheduler = ???
 
   taskScheduler.start()
+
+  def clean[F <: AnyRef](f: F): F = {
+    ClosureCleaner.clean(f)
+    f
+  }
 
   // Methods for creating RDDs
 
@@ -67,6 +77,10 @@ class SparkContext(config: SparkConf) extends Logging {
     results
   }
 
+  def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
+    runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), 0 until rdd.partitions.size, false)
+  }
+
   // Process Auto ID
   private val nextShuffledId = new AtomicInteger(0)
   private val nextRddId = new AtomicInteger(0)
@@ -76,7 +90,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
 
 
-  def defaultParallelism: Int = taskScheduler.defaultParallelism
+  def defaultParallelism: Int = taskScheduler.defaultParallelism()
 
   def version = SparkContext.SPARK_VERSION
 }
@@ -88,7 +102,7 @@ object SparkContext extends Logging {
     // Regular expression used for local[N] and local[*] master formats
     val LOCAL_N_REGEX = """local\[([0-9\*]+)\]""".r
     // Regular expression for connecting to Spark deploy clusters
-    val SPARK_REGEX = """spark://(.*)""".r
+    // val SPARK_REGEX = """spark://(.*)""".r
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -113,3 +127,11 @@ object SparkContext extends Logging {
     }
   }
 }
+
+/**
+ * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
+ * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
+ * The getter for the writable class takes a ClassTag[T] in case this is a generic object
+ * that doesn't know the type of T when it is created. This sounds strange but is necessary to
+ * support converting subclasses of Writable to themselves (writableWritableConverter).
+ */

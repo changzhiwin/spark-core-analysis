@@ -14,7 +14,10 @@ libraryDependencies ++= Seq(
   "org.apache.logging.log4j" % "log4j-api" % "2.17.2",
   "org.apache.logging.log4j" % "log4j-core" % "2.17.2" % Runtime,
   // https://mvnrepository.com/artifact/com.google.guava/guava/31.1-jre
-  "com.google.guava" % "guava" % "31.1-jre"
+  "com.google.guava" % "guava" % "31.1-jre",
+  // https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/util/ClosureCleaner.scala
+  "org.apache.commons" % "commons-lang3" % "3.12.0",
+  "org.apache.xbean" % "xbean-asm9-shaded" % "4.21"
 )  
 
 Compile / mainClass := Some("xyz.sourcecodestudy.spark.MainApp")

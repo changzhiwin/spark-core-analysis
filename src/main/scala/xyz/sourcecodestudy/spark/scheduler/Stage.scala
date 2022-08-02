@@ -1,5 +1,7 @@
 package xyz.sourcecodestudy.spark.scheduler
 
+import org.apache.logging.log4j.scala.Logging
+
 import xyz.sourcecodestudy.spark.ShuffleDependency
 import xyz.sourcecodestudy.spark.rdd.RDD
 

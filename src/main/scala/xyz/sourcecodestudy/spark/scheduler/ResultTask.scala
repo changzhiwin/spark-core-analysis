@@ -1,9 +1,11 @@
 package xyz.sourcecodestudy.spark.scheduler
 
+import scala.reflect.ClassTag
+
 import xyz.sourcecodestudy.spark.rdd.RDD
 import xyz.sourcecodestudy.spark.TaskContext
 
-class ResultTask[T, U](
+class ResultTask[T, U: ClassTag](
     stageId: Int,
     val rdd: RDD[T],
     val func: (TaskContext, Iterator[T]) => U,

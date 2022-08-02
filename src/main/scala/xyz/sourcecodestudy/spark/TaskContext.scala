@@ -1,5 +1,7 @@
 package xyz.sourcecodestudy.spark
 
+import scala.collection.mutable.ArrayBuffer
+
 class TaskContext(
     val stageId: Int,
     val partitionId: Int,

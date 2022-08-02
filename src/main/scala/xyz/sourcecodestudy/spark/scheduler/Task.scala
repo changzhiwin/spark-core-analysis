@@ -1,10 +1,13 @@
 package xyz.sourcecodestudy.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, ByteBufferInputStream}
+import scala.reflect.ClassTag
+
+import java.io.{ByteArrayOutputStream}
 import java.nio.ByteBuffer
+
 import xyz.sourcecodestudy.spark.TaskContext
 import xyz.sourcecodestudy.spark.serializer.SerializerInstance
-abstract class Task[T](val stageId: Int, val partitionId: Int) extends Serializable {
+abstract class Task[T: ClassTag](val stageId: Int, val partitionId: Int) extends Serializable {
 
   private   var taskThread: Thread = _
   protected var context: TaskContext = _

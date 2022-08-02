@@ -3,7 +3,9 @@ package xyz.sourcecodestudy.spark.rdd
 import scala.reflect.ClassTag
 import scala.collection.IterableOnce
 
-import xyz.sourcecodestudy.spark.{TaskContext, Partition}
+import org.apache.logging.log4j.scala.Logging
+
+import xyz.sourcecodestudy.spark.{SparkContext, TaskContext, Partition, Partitioner, Dependency, OneToOneDependency}
 
 abstract class RDD[T: ClassTag](
     private val sc: SparkContext,
@@ -62,10 +64,12 @@ abstract class RDD[T: ClassTag](
 
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
+  /*
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null): RDD[(K, Iterator[T])] = {
     val cleanF = sc.clean(f)
     this.map(t => (cleanF(t), t)).groupByKey(p)
   }
+  */
 
   // Actions
 
@@ -79,7 +83,7 @@ abstract class RDD[T: ClassTag](
 
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
-    Array.concat(result: _*)
+    Array.concat(results: _*)
   }
   
 }

@@ -7,7 +7,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.reflect.ClassTag
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
-import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv}
+import xyz.sourcecodestudy.spark.{ShuffleDependency, NarrowDependency}
+import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv, TaskEndReason, Success, TaskContext}
 import xyz.sourcecodestudy.spark.rdd.RDD
 
 class DAGScheduler(
@@ -44,7 +45,7 @@ class DAGScheduler(
   {
     assert(partitions.size > 0)
 
-    val maxPartitions = rdd.partitions.length
+    // val maxPartitions = rdd.partitions.length
 
     val jobId = nextJobId.getAndIncrement()
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
@@ -52,7 +53,7 @@ class DAGScheduler(
     // JobSubmitted, need to create new stage
     val finalStage = newStage(rdd, partitions.size, None, jobId)
 
-    val job = new ActiveJob(jobId, finalStage, func2, partitions)
+    val job = new ActiveJob(jobId, finalStage, func2, partitions.toArray)
 
     if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
       // run locally
@@ -89,7 +90,7 @@ class DAGScheduler(
       case None                         => logger.error(s"No stages registered for job ${job.jobId}")
       case Some(emSet) if emSet.isEmpty => logger.error(s"Empty stages registered for job ${job.jobId}")
       case Some(registeredStages) =>
-        stageIdToJobIds.filter(sId => registeredStages.contains(sId)).foreach {
+        stageIdToJobIds.filter(sId => registeredStages.contains(sId._1)).foreach {
           case (stageId, jobSet) =>
             if (!jobSet.contains(job.jobId)) {
               logger.error(s"Job ${job.jobId} not registered for stage ${stageId} even though that stage was registered for the job")
@@ -135,11 +136,11 @@ class DAGScheduler(
 
     if (resultStage.isEmpty) {
       // 通过stage查找ActiveJob，理论上应该只有一个
-      val resultStageForJob = resultStageToJob.keySet.filter(stage => resultStageToJob(stage).jobId == job.id)
-      if (resultStageForJob.size != 1) {
+      val resultStagesForJob = resultStageToJob.keySet.filter(stage => resultStageToJob(stage).jobId == job.jobId)
+      if (resultStagesForJob.size != 1) {
         logger.warn(s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
       }
-      resultStageToJob --= resultStageForJob
+      resultStageToJob --= resultStagesForJob
     } else {
       resultStageToJob -= resultStage.get
     }
@@ -199,16 +200,18 @@ class DAGScheduler(
   }
 
   private def getParentStages(rdd: RDD[_], jobId: Int): List[Stage] = {
-    val visited = HashSet[Int]()
-    val parents = HashSet[Stage]()
+    val visited = new HashSet[Int]
+    val parents = new HashSet[Stage]
 
     def visit(r: RDD[_]): Unit = {
       if (!visited(r.id)) {
         visited += r.id
         for(d <- r.dependencies) {
-          // Notice: 这是一个边界，与上游依赖切断了！！
-          case _: ShuffleDependency[_, _] => parents += getShuffleMapStage(d, jobId)
-          case _                          => visit(d.rdd)
+          d match {
+            // Notice: 这是一个边界，与上游依赖切断了！！
+            case shufDep: ShuffleDependency[_, _] => parents += getShuffleMapStage(shufDep, jobId)
+            case _                          => visit(d.rdd)
+          }
         }
       }
     }
@@ -217,21 +220,23 @@ class DAGScheduler(
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
-    val visited = HashSet[Int]()
-    val missing = HashSet[Stage]()
+    val visited = new HashSet[Int]
+    val missing = new HashSet[Stage]
 
     def visit(r: RDD[_]): Unit = {
-      if (!visited[r.id]) {
+      if (!visited(r.id)) {
         visited += r.id
         for(d <- r.dependencies) {
-          case _: ShuffleDependency[_, _] => {
-            val mapStage = getShuffleMapStage(d, stage.jobId)
-            // 是否计算过，并且结果还保存着，条件（不是shuffle，或者完成了所有的partition计算）
-            if (!mapStage.isAvailable) {
-              missing += mapStage
+          d match {
+            case shufDep: ShuffleDependency[_, _] => {
+              val mapStage = getShuffleMapStage(shufDep, stage.jobId)
+              // 是否计算过，并且结果还保存着，条件（不是shuffle，或者完成了所有的partition计算）
+              if (!mapStage.isAvailable) {
+                missing += mapStage
+              }
             }
+            case _                                => visit(d.rdd)
           }
-          case _                          => visit(d.rdd)
         }
       }
     }
@@ -276,6 +281,7 @@ class DAGScheduler(
     }
   }
 
+  /*
   private def resubmitFailedStages(): Unit = {
     if (failedStages.size > 0) {
       logger.info("Resubmit failed stages")
@@ -285,11 +291,12 @@ class DAGScheduler(
     }
     submitWaitingStages()
   }
+  */
 
   private def submitWaitingStages(): Unit = {
     logger.info("Checking for newly runnable parent stages")
     val waitingStagesCopy = waitingStages.toArray
-    waitingStages.clear
+    waitingStages.clear()
     waitingStagesCopy.sortBy(_.jobId).foreach(stage => submitStage(stage))
   }
 
@@ -324,15 +331,15 @@ class DAGScheduler(
   val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]  // 全局变量
 
   def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
-    val myPending = pendingTasks.getOrUpdate(stage, new HashSet[Task[_]])
+    val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet[Task[_]])
     myPending.clear()
 
-    var tasks = ArrayBuffer[Task[_]]()
+    val tasks = ArrayBuffer[Task[_]]()
     if (stage.isShuffleMap) {
       //TODO
     } else {
       val job = resultStageToJob(stage)
-      for (id <- 0 until job.numTotalJobs) {
+      for (id <- 0 until job.numPartitions if !job.finished(id)) {
         val partition = job.partitions(id)
         tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, id)
       }
@@ -395,7 +402,8 @@ class DAGScheduler(
               case None      =>
                 logger.info(s"Ignoring result from ${rt} because its job has finished")
             }
-          case smt: ShuffleMapTask  =>
+          //case smt: ShuffleMapTask  =>
+          case _                     =>
         }
       case _       =>
 
@@ -418,7 +426,7 @@ class DAGScheduler(
 
     // 只处理注册过的
     if (stageIdToStage.contains(stageId)) {
-      val failedStage = stageIdToStage(stageId).get
+      val failedStage = stageIdToStage(stageId)
       val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
 
       for (resultStage <- dependentStages) {
@@ -439,7 +447,7 @@ class DAGScheduler(
 
 object DAGScheduler {
 
-  val RESUBMIT_TIMEOUT = 200.milliseconds
+  // val RESUBMIT_TIMEOUT = 200.milliseconds
 
   val POLL_TIMEOUT = 10L
 

@@ -1,5 +1,8 @@
 package xyz.sourcecodestudy.spark
 
+import scala.collection.mutable.HashMap
+import scala.collection.JavaConverters._
+
 import org.apache.logging.log4j.scala.Logging
 
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {

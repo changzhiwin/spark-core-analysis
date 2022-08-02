@@ -1,7 +1,7 @@
 package xyz.sourcecodestudy.spark.serializer
 
 import java.nio.ByteBuffer
-import java.io.{OutputStream, InputStream}
+import java.io.{OutputStream, InputStream, ObjectStreamClass}
 import java.io.{ObjectOutputStream, ObjectInputStream}
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
 
@@ -22,17 +22,17 @@ private[spark] class JavaSerializerInstance() extends SerializerInstance {
     val out = serializeStream(bos)
     out.writeObject(t)
     out.close()
-    ByteBuff.wrap(bos.toByteArray)
+    ByteBuffer.wrap(bos.toByteArray)
   }
 
   def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
-    val bis = new ByteArrayInputStream(bytes)
+    val bis = new ByteArrayInputStream(bytes.array())
     val in = deserializeStream(bis)
     in.readObject().asInstanceOf[T]
   }
 
   def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
+    val bis = new ByteArrayInputStream(bytes.array())
     val in = deserializeStream(bis, loader)
     in.readObject().asInstanceOf[T]
   }

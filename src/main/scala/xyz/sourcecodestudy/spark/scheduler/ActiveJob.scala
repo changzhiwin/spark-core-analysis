@@ -1,6 +1,6 @@
 package xyz.sourcecodestudy.spark.scheduler
 
-import org.apache.spark.TaskContext
+import xyz.sourcecodestudy.spark.TaskContext
 
 class ActiveJob(
     val jobId: Int,

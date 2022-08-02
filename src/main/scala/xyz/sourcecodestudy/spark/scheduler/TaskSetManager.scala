@@ -6,7 +6,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.{TaskEndReason, Success, TaskKilled, ExceptionFailure}
+import xyz.sourcecodestudy.spark.{TaskEndReason, Success, TaskState}  /*TaskKilled, ExceptionFailure,*/
 import xyz.sourcecodestudy.spark.TaskState.TaskState
 import xyz.sourcecodestudy.spark.SparkEnv
 
@@ -36,6 +36,8 @@ class TaskSetManager(
     runningTaskSet.add(taskId)
   }
   def removeRunningTask(taskId: Long): Unit = {
+    // 同是删除关联的taskInfo
+    taskInfos.remove(taskId)
     runningTaskSet.remove(taskId)
   }
 
@@ -45,6 +47,7 @@ class TaskSetManager(
   // Record pending
   val allPendingTasks = new ArrayBuffer[Int]
 
+  // 注意：第一个参数是用下标表示的task，而不是使用taskId
   private def addPendingTask(index: Int, readding: Boolean = false): Unit = {
     readding match {
       case false => allPendingTasks += index
@@ -72,7 +75,7 @@ class TaskSetManager(
     idx match {
       case -1  => None
       case _   => {
-        // 从队列取出
+        // 出队列
         allPendingTasks.remove(idx)
         Some(idx)
       }
@@ -96,6 +99,8 @@ class TaskSetManager(
             addRunningTask(taskId)
 
             val taskName = s"task ${taskSet.id}:${taskId}:${index}"
+
+            // 通知DAG一个task真实开始调度执行
             sched.dagScheduler.taskStarted(task, info)
 
             Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
@@ -112,10 +117,10 @@ class TaskSetManager(
 
     val info = taskInfos(taskId)
     val index = info.index
-    val host = info.host
+    //val host = info.host
     removeRunningTask(taskId)
 
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value, null, info)
+    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), null, info)
 
     successful(index) match {
       case false => {
@@ -135,7 +140,7 @@ class TaskSetManager(
     
     val info = taskInfos(taskId)
     val index = info.index
-    val host = info.host
+    //val host = info.host
 
     removeRunningTask(taskId)   
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info)

@@ -1,6 +1,6 @@
 package xyz.sourcecodestudy.spark
 
-import scala.reflect.ClassTag
+// import scala.reflect.ClassTag
 
 import xyz.sourcecodestudy.spark.rdd.RDD
 import xyz.sourcecodestudy.spark.util.Utils
@@ -16,7 +16,7 @@ abstract class Partitioner extends Serializable {
 object Partitioner {
   
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
-    val bySize = (Seq(rdd) ++ others).sortyBy(_.partitions.size).reverse
+    val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.size).reverse
 
     // Seq find the first one, return Option[A]
     bySize.find(_.partitioner.isDefined) match {

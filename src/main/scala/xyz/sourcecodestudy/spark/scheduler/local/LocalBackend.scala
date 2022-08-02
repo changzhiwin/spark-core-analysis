@@ -2,9 +2,10 @@ package xyz.sourcecodestudy.spark.scheduler.local
 
 import java.nio.ByteBuffer
 
-import xyz.sourcecodestudy.spark.TaskState.TaskState
+import xyz.sourcecodestudy.spark.TaskState            // object
+import xyz.sourcecodestudy.spark.TaskState.TaskState  // type
 import xyz.sourcecodestudy.spark.executor.Executor
-import xyz.sourcecodestudy.spark.scheduler.SchedulerBackend
+import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer}
 
 class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend {
@@ -22,6 +23,8 @@ class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   override def reviveOffers(): Unit = {
 
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
+
+    // task: TaskDescription
     for (task <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= 1
       executor.launchTask(this, task.taskId, task.serializedTask)
@@ -34,6 +37,7 @@ class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
     executor.killTask(taskId, interruptThread)
   }
 
+  // 这个函数会被多个线程调用的
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
     scheduler.statusUpdate(taskId, state, data)
     if (TaskState.isFinished(state)) {

@@ -1,7 +1,9 @@
 package xyz.sourcecodestudy.spark.rdd
 
 import scala.reflect.ClassTag
-import xyz.sourcecodestudy.spark.Partition
+import scala.collection.immutable.{Range, NumericRange}
+
+import xyz.sourcecodestudy.spark.{Partition, SparkContext, TaskContext}
 
 class ParallelCollectionPartition[T: ClassTag](
     val rddId: Long,
@@ -52,16 +54,17 @@ private object ParallelCollectionRDD {
     seq match {
       case r: Range.Inclusive => {
         val sign = if (r.step < 0) -1 else 1
-        slice(new Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
+        slice(Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
       }
       case r: Range => {
         val total = r.length
         (0 until numSlices).map(i => {
           val start = ((i * total) / numSlices).toInt
           val end = (((i + 1) * total) / numSlices).toInt
-          new Range(r.start + start * r.step, r.start + end * r.step, r.step)
+          Range(r.start + start * r.step, r.start + end * r.step, r.step)
         }).asInstanceOf[Seq[Seq[T]]]
       }
+
       case nr: NumericRange[_] => {
         val sliceSize = (nr.size + numSlices - 1) / numSlices
         var r = nr
@@ -78,7 +81,7 @@ private object ParallelCollectionRDD {
         var start = 0
 
         (0 until numSlices).map( i => {
-          val mod = if (modLeft > 0) { modeLeft -= 1; 1 } else 0
+          val mod = if (modLeft > 0) { modLeft -= 1; 1 } else 0
           val end = start + step + mod
           val part = seq.slice(start, end)
           start = end

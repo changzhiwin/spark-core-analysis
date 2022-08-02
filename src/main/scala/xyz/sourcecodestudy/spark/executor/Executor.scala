@@ -4,11 +4,14 @@ import org.apache.logging.log4j.scala.Logging
 import java.util.concurrent.ConcurrentHashMap
 import java.nio.ByteBuffer
 
-import xyz.sourcecodestudy.spark.{TaskEndReason, TaskKilled, ExceptionFailure}
-import xyz.sourcecodestudy.spark.TaskState.TaskState
+// import scala.reflect.ClassTag
+
+import xyz.sourcecodestudy.spark.{ExceptionFailure, TaskKilled} /* TaskEndReason, , */ 
+import xyz.sourcecodestudy.spark.{SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskKilledException
 import xyz.sourcecodestudy.spark.util.Utils
-import xyz.sourcecodestudy.spark.schedulerscheduler.Task
+import xyz.sourcecodestudy.spark.scheduler.{Task, SchedulerBackend}
+import xyz.sourcecodestudy.spark.serializer.{JavaSerializer}
 
 class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
@@ -29,7 +32,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
   def killTask(taskId: Long, interruptThread: Boolean): Unit = {
     val tr = Option[TaskRunner](runningTasks.get(taskId))
     tr match {
-      case Some(_) => tr.kill(interruptThread)
+      case Some(taskRunner) => taskRunner.kill(interruptThread)
       case None     =>
     }
   }
@@ -65,10 +68,12 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
         backend.statusUpdate(taskId, TaskState.FINISHED, valueBytes)
 
-        logger.info(s"Finished task ID ${taskId}")
+        logger.info(s"Finished task ID ${taskId}, value = ${value}")
 
       } catch {
+  
         /*
+        // TODO
         case ffe: FetchFailedException => {
           logger.info(s"Executor Fetch failed task ${taskId}")
           val reason = ffe.toTaskEndReason
@@ -81,8 +86,8 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
         }
         case t: Throwable => {
           logger.error(s"Exeception in task ID ${taskId}")
-          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
-          backend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          //val reason = 
+          backend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)))
         }
       } finally {
         runningTasks.remove(taskId)

@@ -11,7 +11,6 @@ import xyz.sourcecodestudy.spark.{SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskKilledException
 import xyz.sourcecodestudy.spark.util.Utils
 import xyz.sourcecodestudy.spark.scheduler.{Task, SchedulerBackend}
-import xyz.sourcecodestudy.spark.serializer.{JavaSerializer}
 
 class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 

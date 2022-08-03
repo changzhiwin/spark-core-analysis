@@ -16,7 +16,7 @@ trait Serializer {
   */
 trait SerializerInstance {
   
-  def serialize[T: ClassTag]: ByteBuffer
+  def serialize[T: ClassTag](t: T): ByteBuffer
 
   def deserialize[T: ClassTag](bytes: ByteBuffer): T
 

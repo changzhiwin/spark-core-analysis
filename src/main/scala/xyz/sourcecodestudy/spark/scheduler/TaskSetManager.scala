@@ -41,7 +41,7 @@ class TaskSetManager(
     runningTaskSet.remove(taskId)
   }
 
-  override def runningTasks = runningTaskSet.size
+  def runningTasks = runningTaskSet.size
   // End Record running task
 
   // Record pending

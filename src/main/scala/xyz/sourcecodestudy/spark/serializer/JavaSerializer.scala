@@ -17,7 +17,7 @@ class JavaSerializer() extends Serializer {
 
 private[spark] class JavaSerializerInstance() extends SerializerInstance {
 
-  def serializer[T: ClassTag](t: T): ByteBuffer = {
+  def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)

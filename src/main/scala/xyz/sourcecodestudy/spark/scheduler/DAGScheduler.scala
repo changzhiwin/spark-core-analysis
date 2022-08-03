@@ -171,6 +171,7 @@ class DAGScheduler(
               }
             case narrowDep: NarrowDependency[_]   =>
               visit(narrowDep.rdd)
+            case _                                =>
           }
         }
       }

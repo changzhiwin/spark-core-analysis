@@ -1,7 +1,6 @@
 package xyz.sourcecodestudy.spark
 
 import scala.collection.mutable.HashMap
-//import scala.collection.JavaConverters._
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.scala.Logging

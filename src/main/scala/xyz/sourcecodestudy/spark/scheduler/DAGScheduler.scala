@@ -41,6 +41,7 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       allowLocal: Boolean,
+      // resultHandler 没有被调用，导致collect失败，TODO
       resultHandler: (Int, U) => Unit): Unit =
   {
     assert(partitions.size > 0)

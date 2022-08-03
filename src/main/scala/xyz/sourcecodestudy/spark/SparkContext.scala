@@ -19,7 +19,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val conf = config.clone()
 
-  val master = conf.get("spark.master", "local-master")
+  val master = conf.get("spark.master", "local")
   
   val isLocal = master.startsWith("local")
 
@@ -32,8 +32,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // Scheduler
   val taskScheduler = SparkContext.createTaskScheduler(this, master)
 
-  val dagScheduler: DAGScheduler = ???
+  // new One
+  val dagScheduler: DAGScheduler = new DAGScheduler(this, taskScheduler, env)
 
+  taskScheduler.setDAGScheduler(dagScheduler)
   taskScheduler.start()
 
   def clean[F <: AnyRef](f: F): F = {
@@ -61,9 +63,10 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dagScheduler == null) {
       throw new SparkException("DAG scheduler not Found")
     }
-    
+    val cleanedFunc = clean(func)
+
     val start = System.nanoTime
-    dagScheduler.runJob(rdd, func, partitions, allowLocal, resultHandler)
+    dagScheduler.runJob(rdd, cleanedFunc, partitions, allowLocal, resultHandler)
     logger.info(s"Job finished: rdd(${rdd.id}, ${partitions}), took ${(System.nanoTime - start) / 1e9} s")
   }
 
@@ -127,11 +130,3 @@ object SparkContext extends Logging {
     }
   }
 }
-
-/**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The getter for the writable class takes a ClassTag[T] in case this is a generic object
- * that doesn't know the type of T when it is created. This sounds strange but is necessary to
- * support converting subclasses of Writable to themselves (writableWritableConverter).
- */

@@ -23,12 +23,12 @@ object Utils extends Logging {
     new ThreadFactoryBuilder().setDaemon(true)
 
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-d%").build()
+    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-d%").build()
+    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 

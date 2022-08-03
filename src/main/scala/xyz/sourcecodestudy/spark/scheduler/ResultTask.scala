@@ -1,11 +1,9 @@
 package xyz.sourcecodestudy.spark.scheduler
 
-import scala.reflect.ClassTag
-
 import xyz.sourcecodestudy.spark.rdd.RDD
 import xyz.sourcecodestudy.spark.TaskContext
 
-class ResultTask[T, U: ClassTag](
+class ResultTask[T, U](
     stageId: Int,
     val rdd: RDD[T],
     val func: (TaskContext, Iterator[T]) => U,
@@ -13,6 +11,8 @@ class ResultTask[T, U: ClassTag](
     //locs: Seq[TaskLocation],
     val outputId: Int) 
   extends Task[U](stageId, _partitionId) {
+
+  println(s"---> ResultTask, (stageId, _partitionId, outputId) = (${stageId}, ${_partitionId}, ${outputId})")
 
   val split = if (rdd == null) null else rdd.partitions(partitionId)
 
@@ -25,7 +25,7 @@ class ResultTask[T, U: ClassTag](
     
   }  
 
-  override def preferredLocations: Seq[TaskLocation] = Nil // if (locs == null) Nil else locs.toSet.toSeq
+  @transient override def preferredLocations: Seq[TaskLocation] = Nil // if (locs == null) Nil else locs.toSet.toSeq
 
   override def toString(): String = s"ResultTask($stageId, $partitionId)"
 

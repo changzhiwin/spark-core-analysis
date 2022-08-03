@@ -72,14 +72,17 @@ class TaskSetManager(
     */
   private def findTask(execId: String, host: String): Option[Int] = {
     val idx = allPendingTasks.lastIndexWhere(taskIdx => !successful(taskIdx))
-    idx match {
+    val findTask = idx match {
       case -1  => None
       case _   => {
         // 出队列
+        val value = allPendingTasks(idx)
         allPendingTasks.remove(idx)
-        Some(idx)
+        Some(value)
       }
     }
+
+    findTask
   }
 
   // Respond to an offer of a single executor from the scheduler by finding a task
@@ -95,6 +98,7 @@ class TaskSetManager(
             val info = new TaskInfo(taskId, index, execId, host)
             taskInfos(taskId) = info
 
+            logger.info(s"task ${taskSet.id}:${taskId}:${index}. serializedTask, ${task.toString()}")
             val serializedTask = Task.serializeWithDependencies(task, ser)
             addRunningTask(taskId)
 

@@ -1,16 +1,16 @@
 package xyz.sourcecodestudy.spark.scheduler
 
-import scala.reflect.ClassTag
+//import scala.reflect.ClassTag
 
 import java.io.{ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
 import xyz.sourcecodestudy.spark.TaskContext
 import xyz.sourcecodestudy.spark.serializer.SerializerInstance
-abstract class Task[T: ClassTag](val stageId: Int, val partitionId: Int) extends Serializable {
+abstract class Task[T](val stageId: Int, val partitionId: Int) extends Serializable {
 
-  private   var taskThread: Thread = _
-  protected var context: TaskContext = _
+  @transient private   var taskThread: Thread = _
+  @transient protected var context: TaskContext = _
 
   final def run(attemptId: Long): T = {
     context = new TaskContext(stageId, partitionId, attemptId)
@@ -25,7 +25,7 @@ abstract class Task[T: ClassTag](val stageId: Int, val partitionId: Int) extends
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
-  private var _killed: Boolean = false
+  @transient private var _killed: Boolean = false
   def killed: Boolean = _killed
 
   def kill(interruptThread: Boolean): Unit = {
@@ -44,13 +44,13 @@ object Task {
   def serializeWithDependencies(
       task: Task[_],
       serializer: SerializerInstance): ByteBuffer = {
-    
-    val out = new ByteArrayOutputStream(4096)
     //val dataOut = new DataOutputStream(out)
 
-    val taskBytes = serializer.serialize(task).array()
-    out.write(taskBytes)
-    ByteBuffer.wrap(out.toByteArray)
+    //val out = new ByteArrayOutputStream(4096)
+    //val taskBytes = serializer.serialize(task).array()
+    //out.write(taskBytes)
+    //ByteBuffer.wrap(out.toByteArray)
+    serializer.serialize(task)
   }
 
   def deserializeWithDependencies(serializedTask: ByteBuffer): (ByteBuffer) = {

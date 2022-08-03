@@ -2,6 +2,23 @@
 深入理解Spark Core，目标是运行自己版本的RDD
 
 # 进展
+
+## 0803
+1，解除所有errors
+2，可运行NarrowDependency的map、filter，关键里程碑
+```
+object MainApp extends Logging {
+
+  def main(args: Array[String]) = { 
+
+    val sc = new SparkContext()
+    logger.trace(s"Enter application, master = ${sc.master}")
+
+    sc.parallelize(Seq(1, 2, 3, 4, 5, 6), 3).map(n => n * 10).filter(n => n > 30).foreach(println _)
+  }
+}
+```
+
 ## 0725
 1，完整理解MapOutputTracker、CacheTracker，前者用来管理shuffle的元数据，后者管理rdd缓存的元数据
 2，了解LinkedHashMap用于LRU机制

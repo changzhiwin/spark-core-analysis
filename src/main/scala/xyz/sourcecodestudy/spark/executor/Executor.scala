@@ -54,12 +54,14 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
       val resultSer = SparkEnv.get.serializer.newInstance()
 
       try {
+        logger.info(s"Start deserialize task ${taskId}")
         task = ser.deserialize[Task[Any]](serializedTask, Thread.currentThread.getContextClassLoader)
+        logger.info(s"End deserialize task ${taskId}, ${task}")
 
         if (killed) throw new TaskKilledException
 
         // 返回值，序列化后传参
-        val value = task.run(taskId.toInt)
+        val value = task.run(taskId)
 
         if (task.killed) throw new TaskKilledException
 

@@ -8,12 +8,12 @@ import org.apache.logging.log4j.scala.Logging
 import xyz.sourcecodestudy.spark.{SparkContext, TaskContext, Partition, Partitioner, Dependency, OneToOneDependency}
 
 abstract class RDD[T: ClassTag](
-    private val sc: SparkContext,
+    @transient private val sc: SparkContext,
     private val deps: Seq[Dependency[_]]
   ) extends Serializable with Logging {
 
   // Construct for only one one-to-one dependency
-  def this(oneParent: RDD[_]) = this(oneParent.context, List(new OneToOneDependency(oneParent)))
+  def this(@transient oneParent: RDD[_]) = this(oneParent.context, Seq(new OneToOneDependency(oneParent)))
 
   def sparkContext: SparkContext = sc
 
@@ -22,6 +22,8 @@ abstract class RDD[T: ClassTag](
   def conf = sc.conf
 
   val id: Int = sc.newRddId()
+
+  logger.info(s"New RDD($id) dependencies = ${dependencies.size}")
 
   protected def getPartitions: Array[Partition]
 
@@ -37,7 +39,7 @@ abstract class RDD[T: ClassTag](
     getDependencies
   }
 
-  protected def firstParent[U: ClassTag] = {
+  protected def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 

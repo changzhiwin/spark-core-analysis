@@ -52,6 +52,7 @@ private object ParallelCollectionRDD {
     }
 
     seq match {
+      /*
       case r: Range.Inclusive => {
         val sign = if (r.step < 0) -1 else 1
         slice(Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
@@ -73,7 +74,7 @@ private object ParallelCollectionRDD {
           r = r.drop(sliceSize)
           part
         })
-      }
+      }*/
       case _ => {
         val total = seq.size
         val step = total / numSlices

@@ -139,6 +139,7 @@ class TaskSchedulerImpl(
     //  taskIdToTaskSetId: HashMap[Long, String]
 
     synchronized {
+      logger.info(s"statusUpdate call taskId ${taskId}, state = ${state}")
       try {
         taskIdToTaskSetId.get(taskId) match {
           case Some(taskSetId) =>
@@ -152,6 +153,8 @@ class TaskSchedulerImpl(
                   // 无异常，运行完成
                   case TaskState.FINISHED =>
                     taskSetMgr.handleSuccessfulTask(taskId, new DirectTaskResult(serializedData, null))
+                  case TaskState.RUNNING  =>
+                    logger.info(s"Task(${taskId}) is running state")
                   case _                  =>
                     // 需要反序列化成TaskEndReason对象，当前支持了TaskKilled, ExceptionFailure
                     // TODO，反序列化有可能失败
@@ -165,10 +168,10 @@ class TaskSchedulerImpl(
 
           case None            =>
             logger.warn(s"Don't know why: task(${taskId}) success, but not found taskIdToTaskSetId")
-
         }
       } catch {
-        case e: Exception => logger.error(s"Exception in statusUpdate, ${e}")
+        // t.toString, t.getStackTrace
+        case e: Exception => logger.error(s"Exception in statusUpdate, ${e.toString}, ${e.getStackTrace}")
       }
     }
   }

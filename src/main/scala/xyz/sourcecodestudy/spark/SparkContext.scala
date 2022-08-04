@@ -76,7 +76,7 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions: Seq[Int],
       allowLocal: Boolean): Array[U] = {
     val results = new Array[U](partitions.size)
-    runJob[T, U](rdd, func, partitions, allowLocal, (index, res) => results(index) = res)
+    runJob[T, U](rdd, func, partitions, allowLocal, (index: Int, res: U) => results(index) = res)
     results
   }
 

@@ -6,7 +6,8 @@ class ActiveJob(
     val jobId: Int,
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int]) {
+    val partitions: Array[Int],
+    val listener: JobListener) {
 
   val numPartitions = partitions.length
   val finished = Array.fill[Boolean](numPartitions)(false)

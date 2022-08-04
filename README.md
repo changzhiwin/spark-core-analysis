@@ -3,6 +3,29 @@
 
 # 进展
 
+## 0804
+1，支持collect，遇到了线程先后顺序导致的空指针问题，使用wait解决
+```
+object MainApp extends Logging {
+  def main(args: Array[String]) = { 
+    val sc = new SparkContext()
+    logger.trace(s"Enter application, master = ${sc.master}")
+
+    val rdd = sc.parallelize(Seq(1, 2, 3, 4, 5, 6, 7, 8, 9), 3)
+    val result = rdd.map(n => n * 10).filter(n => n > 50).collect()
+    logger.error(s"Result = ${result.toSeq}")
+
+    val lens = sc.parallelize(Seq("spark", "foobar", "scala"), 3).map(n => n.length).collect()
+    logger.error(s"lens = ${lens.toSeq}")
+  }
+}
+
+// output
+2022-08-04 19:01:04 ERROR MainApp$: Result = ArraySeq(60, 70, 80, 90)
+2022-08-04 19:01:05 ERROR MainApp$: lens = ArraySeq(5, 6, 5)
+[success] Total time: 2 s, completed 2022-8-4 19:01:05
+```
+
 ## 0803
 1，解除所有errors
 2，可运行NarrowDependency的map、filter，关键里程碑

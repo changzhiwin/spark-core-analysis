@@ -8,7 +8,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.{TaskEndReason} /* , TaskKilled, ExceptionFailure */
+import xyz.sourcecodestudy.spark.{TaskEndReason}
 import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskState.TaskState
 

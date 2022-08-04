@@ -12,8 +12,6 @@ class ResultTask[T, U](
     val outputId: Int) 
   extends Task[U](stageId, _partitionId) {
 
-  println(s"---> ResultTask, (stageId, _partitionId, outputId) = (${stageId}, ${_partitionId}, ${outputId})")
-
   val split = if (rdd == null) null else rdd.partitions(partitionId)
 
   override def runTask(context: TaskContext): U = {

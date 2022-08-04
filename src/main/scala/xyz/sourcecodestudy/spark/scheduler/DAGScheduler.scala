@@ -33,7 +33,12 @@ class DAGScheduler(
       parititions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit): Unit ={
-    submitJob(rdd, func, parititions, allowLocal, resultHandler)
+    val waiter = submitJob(rdd, func, parititions, allowLocal, resultHandler)
+    // 线程等待，处理main线程提前执行的问题
+    waiter.awaitResult() match {
+      case 0      => 
+      case r: Int => logger.error("Failed run, awaitResult = -1")
+    }
   }
 
   def submitJob[T, U: ClassTag](
@@ -42,7 +47,7 @@ class DAGScheduler(
       partitions: Seq[Int],
       allowLocal: Boolean,
       // resultHandler 没有被调用，导致collect失败，TODO
-      resultHandler: (Int, U) => Unit): Unit =
+      resultHandler: (Int, U) => Unit): JobWaiter[U] =
   {
     assert(partitions.size > 0)
 
@@ -54,7 +59,9 @@ class DAGScheduler(
     // JobSubmitted, need to create new stage
     val finalStage = newStage(rdd, partitions.size, None, jobId)
 
-    val job = new ActiveJob(jobId, finalStage, func2, partitions.toArray)
+    // resultHandler放到job上，当resultStage完成后，调用resultHandler
+    val waiter = new JobWaiter[U](jobId, partitions.size, resultHandler)
+    val job = new ActiveJob(jobId, finalStage, func2, partitions.toArray, waiter)
 
     if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
       // run locally
@@ -66,6 +73,7 @@ class DAGScheduler(
     }
 
     submitWaitingStages()
+    waiter
   }
   // Job Process end
 
@@ -334,7 +342,7 @@ class DAGScheduler(
 
   def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet[Task[_]])
-    myPending.clear()
+    myPending.clear()  // 这个pending，每次都清空，因为这里的key是stage
 
     val tasks = ArrayBuffer[Task[_]]()
     if (stage.isShuffleMap) {
@@ -343,7 +351,7 @@ class DAGScheduler(
       val job = resultStageToJob(stage)
       for (id <- 0 until job.numPartitions if !job.finished(id)) {
         val partition = job.partitions(id)
-        tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, id)
+        tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, id) // (stageId, rdd, func, partition, outputId)
       }
     }
 
@@ -391,9 +399,13 @@ class DAGScheduler(
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
               case Some(job) =>
+                //判断这个分区是否完成，outputId
                 if (!job.finished(rt.outputId)) {
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
+
+                  // 理论上完成的这个分区就是outputId
+                  job.listener.taskSucceeded(rt.outputId, result)
 
                   // 如果这个job完成了，对全局状态进行维护
                   if (job.numFinished == job.numPartitions) {

@@ -3,6 +3,31 @@
 
 # 进展
 
+## 0808
+1，完成shuffle逻辑，支持repartition
+```
+def main(args: Array[String]) = { 
+
+  val sc = new SparkContext()
+  logger.trace(s"Enter application, master = ${sc.master}")
+
+  val rdd = sc.parallelize(Seq("aa", "A", "bb", "B", "cc", "C", "dd", "D", "X"), 3)
+
+  rdd.foreachPartition(iter => println(iter.toSeq))
+
+  rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(iter.toSeq)))
+}
+
+// output
+[info] running xyz.sourcecodestudy.spark.MainApp 
+List(aa, A, bb)
+List(B, cc, C)
+List(dd, D, X)
+List(A, B, C, D, X)
+List(aa, bb, cc, dd)
+[success] Total time: 9 s, completed 2022-8-8 22:25:47
+```
+
 ## 0804
 1，支持collect，遇到了线程先后顺序导致的空指针问题，使用wait解决
 ```

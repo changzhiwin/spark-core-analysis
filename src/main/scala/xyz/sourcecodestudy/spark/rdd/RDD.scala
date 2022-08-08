@@ -5,6 +5,8 @@ import scala.collection.IterableOnce
 
 import org.apache.logging.log4j.scala.Logging
 
+import xyz.sourcecodestudy.spark.HashPartitioner
+import xyz.sourcecodestudy.spark.SparkContext._
 import xyz.sourcecodestudy.spark.{SparkContext, TaskContext, Partition, Partitioner, Dependency, OneToOneDependency}
 
 abstract class RDD[T: ClassTag](
@@ -65,6 +67,12 @@ abstract class RDD[T: ClassTag](
   def flatMap[U: ClassTag](f: T => IterableOnce[U]): RDD[U] = new FlatMappedRDD(this, sc.clean(f))
 
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
+
+  def reHashPartition[K: ClassTag](f: T => K, numPartitions: Int)(implicit ord: Ordering[K] = null): RDD[(K, T)] = {
+    val cleanF = sc.clean(f)
+    //隐式转换为PairRDDFunctions，调用partitionBy方法得到ShuffledRDD
+    this.map(t => (cleanF(t), t)).partitionBy(new HashPartitioner(numPartitions))
+  }
 
   /*
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null): RDD[(K, Iterator[T])] = {

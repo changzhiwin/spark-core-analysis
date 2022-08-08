@@ -8,6 +8,8 @@ import xyz.sourcecodestudy.spark.util.Utils
 class SparkEnv(
     val serializer: Serializer,
     val closureSerializer: Serializer,
+    val shuffleFetcher: ShuffleFetcher,
+    val mapOutputTracker: MapOutputTrackerMaster,
     val conf: SparkConf
 ) extends Logging {}
 
@@ -44,7 +46,12 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClass[Serializer]("spark.closure.serializer", 
       "xyz.sourcecodestudy.spark.serializer.JavaSerializer")
 
-    new SparkEnv(serializer, closureSerializer, conf)
+    val shuffleFetcher = instantiateClass[ShuffleFetcher]("spark.shuffleFetcher", 
+      "xyz.sourcecodestudy.spark.FileStoreShuffleFetcher")
+
+    val mapOutputTracker = new MapOutputTrackerMaster(conf)
+
+    new SparkEnv(serializer, closureSerializer, shuffleFetcher, mapOutputTracker, conf)
   }
 
 }

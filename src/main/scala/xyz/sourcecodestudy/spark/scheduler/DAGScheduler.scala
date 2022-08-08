@@ -7,16 +7,17 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.reflect.ClassTag
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
-import xyz.sourcecodestudy.spark.{ShuffleDependency, NarrowDependency}
+import xyz.sourcecodestudy.spark.{MapOutputTrackerMaster, ShuffleDependency, NarrowDependency}
 import xyz.sourcecodestudy.spark.{SparkContext, SparkEnv, TaskEndReason, Success, TaskContext}
 import xyz.sourcecodestudy.spark.rdd.RDD
 
 class DAGScheduler(
     val sc: SparkContext,
     val taskScheduler: TaskScheduler,
+    mapOutputTracker: MapOutputTrackerMaster,
     env: SparkEnv) extends Logging {
 
-  def this(sc: SparkContext) = this(sc, sc.taskScheduler, sc.env)
+  def this(sc: SparkContext, taskScheduler: TaskScheduler, env: SparkEnv) = this(sc, taskScheduler, sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], sc.env)
 
   private val nextJobId = new AtomicInteger(0)
   def numTotalJobs: Int = nextJobId.get()
@@ -72,7 +73,7 @@ class DAGScheduler(
       submitStage(finalStage)
     }
 
-    submitWaitingStages()
+    //submitWaitingStages()
     waiter
   }
   // Job Process end
@@ -114,6 +115,9 @@ class DAGScheduler(
                   }
 
                   // TODO shuffleToMapStage
+                  for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+                    shuffleToMapStage.remove(k)
+                  }
 
                   if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
                     logger.debug(s"Removing pending status for stage ${stageId}")
@@ -274,7 +278,21 @@ class DAGScheduler(
       shuffleDep: ShuffleDependency[_, _],
       jobId: Int): Stage = {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId)
-    //TODO: mapOutputTracker registe
+    
+    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+      // 避免重复注册
+      // 问题：注册过，但有可能分片数据没有计算完成
+      val locs = mapOutputTracker.getMapOutputStatuses(shuffleDep.shuffleId)
+      for (i <- 0 until locs.size) {
+        stage.outputLocs(i) = Option(locs(i)).toList
+        // 不能直接调用addOutputLoc，因为可能locs包含null的数据
+        //stage.addOutputLoc(i, locs(i))
+      }
+      stage.numAvailableOutputs = locs.count(_ != null)
+    } else {
+      logger.info(s"Registering RDD ${rdd.id}, shuffleId ${shuffleDep.shuffleId}")
+      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
+    }
     stage
   }
 
@@ -304,7 +322,7 @@ class DAGScheduler(
   */
 
   private def submitWaitingStages(): Unit = {
-    logger.info("Checking for newly runnable parent stages")
+    logger.info(s"Checking for newly runnable parent stages, size = ${waitingStages.size}, waitingStages = ${waitingStages}")
     val waitingStagesCopy = waitingStages.toArray
     waitingStages.clear()
     waitingStagesCopy.sortBy(_.jobId).foreach(stage => submitStage(stage))
@@ -314,21 +332,23 @@ class DAGScheduler(
   def submitStage(stage: Stage): Unit = {
     activeJobForStage(stage) match {
       case Some(jobId) => {
-        logger.info(s"submitStage(${stage}) in jobId ${jobId}")
+        //logger.info(s"submitStage(${stage}) in jobId ${jobId}")
         if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
           // 查找依赖的Stage，是否有未完成的
           val missing = getMissingParentStages(stage).sortBy(_.id)
-          logger.info(s"missing: ${missing}")
+          logger.info(s"submitStage(${stage}) in jobId ${jobId}, missing: ${missing}")
 
           if (missing == Nil) {
             logger.info(s"Submitting ${stage} (${stage.rdd}), which has no missing parents")
-            // Do real thing
+            // Do real things
             submitMissingTasks(stage, jobId)
             runningStages += stage
           } else {
+            // 本次依赖的stage进入等待队列
+            waitingStages += stage
+            logger.info(s"waitingStages ${waitingStages.toSeq}, ${stage} (${stage.rdd.id})")
             // 有依赖未完，先执行依赖。这是一个递归的过程
             missing.foreach(p => submitStage(p))
-            waitingStages += stage
           }
         }
       }
@@ -346,7 +366,11 @@ class DAGScheduler(
 
     val tasks = ArrayBuffer[Task[_]]()
     if (stage.isShuffleMap) {
-      //TODO
+      // 生成shuffle任务，特别注意判断stage.outputLocs(p)，不为空说明已经有部分分区数据完成，不需要建任务的！！
+      for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
+        // stageId, rdd, dep, _partitionId, locs
+        tasks += new ShuffleMapTask(stage.id, stage.rdd, stage.shuffleDep.get, p, Nil)
+      }
     } else {
       val job = resultStageToJob(stage)
       for (id <- 0 until job.numPartitions if !job.finished(id)) {
@@ -392,8 +416,8 @@ class DAGScheduler(
 
     reason match {
       case Success =>
-        logger.info(s"Completed ${task}")
         pendingTasks(stage) -= task
+        logger.info(s"Stage ${stage}, completed ${task}, left ${pendingTasks(stage).size} tasks")
 
         task match {
           case rt: ResultTask[_, _] =>
@@ -416,17 +440,64 @@ class DAGScheduler(
               case None      =>
                 logger.info(s"Ignoring result from ${rt} because its job has finished")
             }
-          //case smt: ShuffleMapTask  =>
+          case smt: ShuffleMapTask  =>
+            val status = result.asInstanceOf[String]
+            stage.addOutputLoc(smt.partitionId, status)
+
+            // 处理stage结束
+            if (runningStages.contains(stage) && pendingTasks(stage).isEmpty) {
+              
+              runningStages -= stage
+
+              if (stage.isShuffleMap) {
+                mapOutputTracker.registerMapOutputs(
+                  stage.shuffleDep.get.shuffleId,
+                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
+                )
+              }
+
+              // stage完后，如果还有没有数据的分区，那说明有异常
+              if (stage.outputLocs.exists(_ == Nil)) {
+                logger.error(s"Stage ${stage}, some tasks missing")
+                throw new RuntimeException("Shuffle Task failed: missing some part")
+              } else {
+                // 找到下一步可运行的stage，因为完成的这个shuffle Stage，已经Available了
+
+                // 下面这些步骤和直接调用submitWaitingStages()作用一样吧？待验证
+                val newlyRunable = new ArrayBuffer[Stage]
+                for (stg <- waitingStages) {
+                  val miss = getMissingParentStages(stg)
+                  logger.info(s"Find new Stage ${stg}, miss ${miss.toSeq}")
+                  if (miss == Nil) {
+                    newlyRunable += stg
+                  }
+                }
+
+                logger.info(s"Finish a shuffle stage, waitingStages ${waitingStages.toSeq}, new stage to run ${newlyRunable.toSeq}")
+
+                waitingStages --= newlyRunable
+                runningStages ++= newlyRunable
+
+                for {
+                  stage <- newlyRunable.sortBy(_.id)
+                  jobId <- activeJobForStage(stage)
+                } {
+                  logger.info(s"After ShuffleMapTask, Submiting stage(${stage}), rdd(${stage.rdd}).")
+                  submitMissingTasks(stage, jobId)
+                }
+              }
+            }
           case _                     =>
         }
       case _       =>
 
     }
-    submitWaitingStages()
+    //submitWaitingStages()
   }
 
   def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {
-    submitWaitingStages()
+    // 需要调用waiting队列吗？
+    // submitWaitingStages()
   }
 
   def taskGettingResult(taskInfo: TaskInfo): Unit = {

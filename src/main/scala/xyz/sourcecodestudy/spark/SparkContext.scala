@@ -7,8 +7,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.logging.log4j.scala.Logging
 
 import scala.reflect.ClassTag
+import scala.language.implicitConversions
 
-import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD}
+import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD, PairRDDFunctions}
 import xyz.sourcecodestudy.spark.scheduler.{TaskScheduler, TaskSchedulerImpl, DAGScheduler}
 import xyz.sourcecodestudy.spark.scheduler.local.LocalBackend
 import xyz.sourcecodestudy.spark.util.ClosureCleaner
@@ -128,5 +129,10 @@ object SparkContext extends Logging {
       case _ => 
         throw new SparkException(s"Not support master URL: ${master}")
     }
+  }
+
+  implicit def rddToPairRDDFunction[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)])(implicit ord: Ordering[K] = null) = {
+    logger.info("implicit call rddToPairRDDFunction[K, V]")
+    new PairRDDFunctions(rdd)
   }
 }

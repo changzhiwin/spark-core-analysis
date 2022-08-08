@@ -5,8 +5,16 @@ import java.io.{InputStream, OutputStream}
 
 import scala.reflect.ClassTag
 
+import xyz.sourcecodestudy.spark.SparkEnv
+
 trait Serializer {
   def newInstance(): SerializerInstance
+}
+
+object Serializer {
+  def getSerializer(serializer: Serializer): Serializer = {
+    if (serializer == null) SparkEnv.get.serializer else serializer
+  }
 }
 
 /**

@@ -13,11 +13,11 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency[T](rdd) {
 
 // Upper type bounds specify that a type must be a subtype of another type
 class ShuffleDependency[K, V](
-    rdd: RDD[Product2[K, V]],
+    rdd: RDD[(K, V)],
     val partitioner: Partitioner,
     val serializer: Serializer = null)
+  //extends Dependency(rdd) {
   extends Dependency(rdd) {
-  //extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffledId()
 

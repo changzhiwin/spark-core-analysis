@@ -9,14 +9,10 @@ object MainApp extends Logging {
     val sc = new SparkContext()
     logger.trace(s"Enter application, master = ${sc.master}")
 
-    val rdd = sc.parallelize(Seq(1, 2, 3, 4, 5, 6, 7, 8, 9), 3)
+    val rdd = sc.parallelize(Seq("aa", "A", "bb", "B", "cc", "C", "dd", "D", "X"), 3)
 
-    val result = rdd.map(n => n * 10).filter(n => n > 50).collect()
+    rdd.foreachPartition(iter => println(iter.toSeq))
 
-    logger.error(s"Result = ${result.toSeq}")
-
-    val lens = sc.parallelize(Seq("spark", "foobar", "scala"), 3).map(n => n.length).collect()
-
-    logger.error(s"lens = ${lens.toSeq}")
+    rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(iter.toSeq)))
   }
 }

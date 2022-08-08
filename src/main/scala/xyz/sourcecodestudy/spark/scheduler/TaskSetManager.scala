@@ -116,7 +116,7 @@ class TaskSetManager(
     }
   }
 
-  // 需要考虑线程安全吧？？？ TODO
+  // 需要考虑线程安全吧？？？ 调用方保证了线程安全
   def handleSuccessfulTask(taskId: Long, result: DirectTaskResult[_]): Unit = {
 
     val info = taskInfos(taskId)

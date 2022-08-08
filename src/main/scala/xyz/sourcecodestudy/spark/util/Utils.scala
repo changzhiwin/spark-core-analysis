@@ -9,6 +9,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 object Utils extends Logging {
 
+  def getShuffledOutputFile(shuffleId: Int, mapId: Int, reduceId: Int): String = {
+    s"./data/shuffled/${shuffleId}-${mapId}-${reduceId}.part"
+  }
+
   def getSparkClassLoader = getClass.getClassLoader
 
   def getContextOrSparkClassLoader =

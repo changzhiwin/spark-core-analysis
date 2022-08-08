@@ -1,7 +1,7 @@
 package xyz.sourcecodestudy.spark.rdd
 
 import scala.reflect.ClassTag
-import scala.collection.immutable.{Range, NumericRange}
+//import scala.collection.immutable.{Range, NumericRange}
 
 import xyz.sourcecodestudy.spark.{Partition, SparkContext, TaskContext}
 

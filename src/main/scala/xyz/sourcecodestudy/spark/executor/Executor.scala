@@ -47,16 +47,15 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
       if (task != null) task.kill(interruptThread)
     }
     override def run(): Unit = {
-      logger.info(s"Running task ID ${taskId}")
+      logger.info(s"Running task id(${taskId})")
       backend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
 
       val ser = SparkEnv.get.closureSerializer.newInstance()
       val resultSer = SparkEnv.get.serializer.newInstance()
 
       try {
-        logger.info(s"Start deserialize task ${taskId}")
         task = ser.deserialize[Task[Any]](serializedTask, Thread.currentThread.getContextClassLoader)
-        logger.info(s"End deserialize task ${taskId}, ${task}")
+        logger.info(s"Finish deserialize task id(${taskId}), ${task}")
 
         if (killed) throw new TaskKilledException
 
@@ -69,7 +68,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
         backend.statusUpdate(taskId, TaskState.FINISHED, valueBytes)
 
-        logger.info(s"Finished task ID ${taskId}, value = ${value}")
+        logger.info(s"Finished task id(${taskId}), value = ${value}")
 
       } catch {
   
@@ -82,11 +81,11 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
         }
         */
         case _: TaskKilledException | _: InterruptedException if task.killed => {
-          logger.info(s"Executor killed task ${taskId}")
+          logger.info(s"Executor killed task id(${taskId})")
           backend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
         case t: Throwable => {
-          logger.error(s"Exeception in task ID ${taskId}")
+          logger.error(s"Exeception in task id(${taskId})")
           //val reason = 
           backend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)))
         }

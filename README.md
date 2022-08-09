@@ -1,3 +1,11 @@
+# 开发环境
+- Java 1.8.0_191
+- Scala 2.13.8
+```
+// how to run
+sbt run
+```
+
 # 目的
 深入理解Spark Core，目标是运行自己版本的RDD
 
@@ -13,19 +21,19 @@ def main(args: Array[String]) = {
 
   val rdd = sc.parallelize(Seq("aa", "A", "bb", "B", "cc", "C", "dd", "D", "X"), 3)
 
-  rdd.foreachPartition(iter => println(iter.toSeq))
+  rdd.foreachPartition(iter => println(s"${Thread.currentThread().getName}, ${iter.toSeq}"))
 
-  rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(iter.toSeq)))
+  rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(s"${Thread.currentThread().getName}, ${iter.toSeq}")))
 }
 
 // output
 [info] running xyz.sourcecodestudy.spark.MainApp 
-List(aa, A, bb)
-List(B, cc, C)
-List(dd, D, X)
-List(A, B, C, D, X)
-List(aa, bb, cc, dd)
-[success] Total time: 9 s, completed 2022-8-8 22:25:47
+Executor task lauch worker-0, List(aa, A, bb)
+Executor task lauch worker-1, List(B, cc, C)
+Executor task lauch worker-0, List(dd, D, X)
+Executor task lauch worker-1, List(aa, bb, cc, dd)
+Executor task lauch worker-2, List(A, B, C, D, X)
+[success] Total time: 4 s, completed 2022-8-9 11:00:49
 ```
 
 ## 0804

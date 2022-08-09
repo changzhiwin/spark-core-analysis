@@ -16,7 +16,6 @@ class ShuffleDependency[K, V](
     rdd: RDD[(K, V)],
     val partitioner: Partitioner,
     val serializer: Serializer = null)
-  //extends Dependency(rdd) {
   extends Dependency(rdd) {
 
   val shuffleId: Int = rdd.context.newShuffledId()

@@ -103,14 +103,14 @@ class DAGScheduler(
         stageIdToJobIds.filter(sId => registeredStages.contains(sId._1)).foreach {
           case (stageId, jobSet) =>
             if (!jobSet.contains(job.jobId)) {
-              logger.error(s"Job ${job.jobId} not registered for stage ${stageId} even though that stage was registered for the job")
+              logger.error(s"Job(${job.jobId}) not registered for stage(${stageId}) even though that stage was registered for the job")
             } else {
               // 该job完成了
               jobSet -= job.jobId
               if (jobSet.isEmpty) {
                 for (stage <- stageIdToStage.get(stageId)) {
                   if (runningStages.contains(stage)) {
-                    logger.info(s"Removing running stage ${stageId}")
+                    logger.info(s"Removing running ${stage}")
                     runningStages -= stage
                   }
 
@@ -120,24 +120,24 @@ class DAGScheduler(
                   }
 
                   if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
-                    logger.debug(s"Removing pending status for stage ${stageId}")
+                    logger.debug(s"Removing pending status for ${stage}")
                   }
                   pendingTasks -= stage
 
                   if (waitingStages.contains(stage)) {
-                    logger.debug(s"Removing stage ${stageId} from waiting set.")
+                    logger.debug(s"Removing ${stage} from waiting set.")
                     waitingStages -= stage
                   }
 
                   if (failedStages.contains(stage)) {
-                    logger.debug(s"Removing stage ${stageId} from failed set.")
+                    logger.debug(s"Removing ${stage} from failed set.")
                     failedStages -= stage
                   }
                 } // End for
 
                 stageIdToStage -= stageId
                 stageIdToJobIds -= stageId
-                logger.debug(s"After removal of stage ${stageId}, remaining stages = ${stageIdToStage.size}") 
+                logger.debug(s"After removal of stage(${stageId}), remaining stages = ${stageIdToStage.size}") 
               }
             }
         }
@@ -151,7 +151,7 @@ class DAGScheduler(
       // 通过stage查找ActiveJob，理论上应该只有一个
       val resultStagesForJob = resultStageToJob.keySet.filter(stage => resultStageToJob(stage).jobId == job.jobId)
       if (resultStagesForJob.size != 1) {
-        logger.warn(s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
+        logger.warn(s"${resultStagesForJob.size} result stages for job(${job.jobId}) (expect exactly 1)")
       }
       resultStageToJob --= resultStagesForJob
     } else {
@@ -290,7 +290,7 @@ class DAGScheduler(
       }
       stage.numAvailableOutputs = locs.count(_ != null)
     } else {
-      logger.info(s"Registering RDD ${rdd.id}, shuffleId ${shuffleDep.shuffleId}")
+      logger.info(s"Registering rdd(${rdd.id}), shuffleId(${shuffleDep.shuffleId})")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
     }
     stage
@@ -332,27 +332,26 @@ class DAGScheduler(
   def submitStage(stage: Stage): Unit = {
     activeJobForStage(stage) match {
       case Some(jobId) => {
-        //logger.info(s"submitStage(${stage}) in jobId ${jobId}")
         if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
           // 查找依赖的Stage，是否有未完成的
           val missing = getMissingParentStages(stage).sortBy(_.id)
-          logger.info(s"submitStage(${stage}) in jobId ${jobId}, missing: ${missing}")
+          logger.info(s"SubmitStage ${stage} in job(${jobId}), missing = ${missing}")
 
           if (missing == Nil) {
-            logger.info(s"Submitting ${stage} (${stage.rdd}), which has no missing parents")
+            logger.info(s"No missing parents ${stage} rdd(${stage.rdd.id})")
             // Do real things
             submitMissingTasks(stage, jobId)
             runningStages += stage
           } else {
-            // 本次依赖的stage进入等待队列
-            waitingStages += stage
-            logger.info(s"waitingStages ${waitingStages.toSeq}, ${stage} (${stage.rdd.id})")
             // 有依赖未完，先执行依赖。这是一个递归的过程
             missing.foreach(p => submitStage(p))
+            // 本次依赖的stage进入等待队列
+            waitingStages += stage
+            logger.info(s"Waiting ${stage} rdd(${stage.rdd.id}), queue = ${waitingStages.toSeq}")
           }
         }
       }
-      case None    => logger.warn(s"No active job for stage ${stage.id}")
+      case None    => logger.warn(s"No active job for stage ${stage}")
     }
   }
   // Stage Process end
@@ -417,7 +416,7 @@ class DAGScheduler(
     reason match {
       case Success =>
         pendingTasks(stage) -= task
-        logger.info(s"Stage ${stage}, completed ${task}, left ${pendingTasks(stage).size} tasks")
+        logger.info(s"${stage}, completed ${task}, left ${pendingTasks(stage).size} tasks")
 
         task match {
           case rt: ResultTask[_, _] =>
@@ -438,7 +437,7 @@ class DAGScheduler(
                   }
                 }
               case None      =>
-                logger.info(s"Ignoring result from ${rt} because its job has finished")
+                logger.warn(s"Ignoring result from ${rt} because its job has finished")
             }
           case smt: ShuffleMapTask  =>
             val status = result.asInstanceOf[String]
@@ -458,22 +457,18 @@ class DAGScheduler(
 
               // stage完后，如果还有没有数据的分区，那说明有异常
               if (stage.outputLocs.exists(_ == Nil)) {
-                logger.error(s"Stage ${stage}, some tasks missing")
+                logger.error(s"${stage}, some tasks missing")
                 throw new RuntimeException("Shuffle Task failed: missing some part")
               } else {
                 // 找到下一步可运行的stage，因为完成的这个shuffle Stage，已经Available了
 
                 // 下面这些步骤和直接调用submitWaitingStages()作用一样吧？待验证
                 val newlyRunable = new ArrayBuffer[Stage]
-                for (stg <- waitingStages) {
-                  val miss = getMissingParentStages(stg)
-                  logger.info(s"Find new Stage ${stg}, miss ${miss.toSeq}")
-                  if (miss == Nil) {
-                    newlyRunable += stg
-                  }
+                for (stg <- waitingStages if getMissingParentStages(stg) == Nil) {
+                  newlyRunable += stg
                 }
 
-                logger.info(s"Finish a shuffle stage, waitingStages ${waitingStages.toSeq}, new stage to run ${newlyRunable.toSeq}")
+                logger.info(s"Finish a shuffle stage, waitingStages = ${waitingStages.toSeq}, ready stages = ${newlyRunable.toSeq}")
 
                 waitingStages --= newlyRunable
                 runningStages ++= newlyRunable
@@ -482,7 +477,7 @@ class DAGScheduler(
                   stage <- newlyRunable.sortBy(_.id)
                   jobId <- activeJobForStage(stage)
                 } {
-                  logger.info(s"After ShuffleMapTask, Submiting stage(${stage}), rdd(${stage.rdd}).")
+                  logger.info(s"After ShuffleMapTask, Submiting ${stage}, rdd(${stage.rdd.id}).")
                   submitMissingTasks(stage, jobId)
                 }
               }

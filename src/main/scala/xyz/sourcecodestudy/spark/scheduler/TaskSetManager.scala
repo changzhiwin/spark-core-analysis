@@ -27,7 +27,7 @@ class TaskSetManager(
   val numFailures = new Array[Int](numTasks)
   val taskInfos = new HashMap[Long, TaskInfo]
   val stageId = taskSet.stageId
-  val name = s"TaskSet_${stageId}"
+  val name = s"TaskSetManager(stageId = ${stageId}, have ${numTasks} tasks)"
 
   // Record running task
   val runningTaskSet = new HashSet[Long]
@@ -98,11 +98,11 @@ class TaskSetManager(
             val info = new TaskInfo(taskId, index, execId, host)
             taskInfos(taskId) = info
 
-            logger.info(s"task ${taskSet.id}:${taskId}:${index}. serializedTask, ${task.toString()}")
+            logger.info(s"Task.serializeWithDependencies(${task})")
             val serializedTask = Task.serializeWithDependencies(task, ser)
             addRunningTask(taskId)
 
-            val taskName = s"task ${taskSet.id}:${taskId}:${index}"
+            val taskName = s"TaskDescription ${taskSet}, task(${taskId}), index(${index})"
 
             // 通知DAG一个task真实开始调度执行
             sched.dagScheduler.taskStarted(task, info)
@@ -131,10 +131,10 @@ class TaskSetManager(
         tasksSucessful += 1
         successful(index) = true
         isZombie = (tasksSucessful == numTasks)
-        logger.info(s"Finished task(${taskId}), in taskSet(${name})")
+        logger.info(s"Finished task(${taskId}), in ${name}")
       }
       case true  => 
-        logger.info(s"Ignoring task-fininshed event for taskId ${taskId}, index ${index}, already completed successfully")
+        logger.info(s"Ignoring task-fininshed event for task(${taskId}), index(${index}), already completed successfully")
     }
 
     maybeFinishTaskSet()
@@ -148,18 +148,18 @@ class TaskSetManager(
 
     removeRunningTask(taskId)   
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info)
-    logger.warn(s"Failed task(${taskId}), in taskSet(${name}) for reason ${reason}")
+    logger.warn(s"Failed task(${taskId}), in ${name} for reason ${reason}")
 
     // 重试逻辑，maxTaskFailures > numFailures(index)
     if (!isZombie && state != TaskState.KILLED) {
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        val message = s"Task ${taskId}:${index} failed ${maxTaskFailures} times; aborting job"
+        val message = s"Task(${taskId}), index(${index}) failed ${maxTaskFailures} times; aborting job"
         logger.error(message)
         abort(message)
       } else {
         // 重试
-        logger.warn(s"Task ${taskId}:${index} failed ${numFailures(index)} times;; retry")
+        logger.warn(s"Task(${taskId}), index(${index}) failed ${numFailures(index)} times; retry")
         addPendingTask(index)
       }
     }

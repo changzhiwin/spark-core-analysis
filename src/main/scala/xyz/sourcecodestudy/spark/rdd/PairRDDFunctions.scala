@@ -9,7 +9,6 @@ import xyz.sourcecodestudy.spark.{Partitioner}
 class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])(implicit ord: Ordering[K]) extends Logging with Serializable {
 
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
-    logger.info(s"call partitionBy with partitioner ${partitioner}")
     new ShuffledRDD[K, V, (K, V)](self, partitioner)
   }
 

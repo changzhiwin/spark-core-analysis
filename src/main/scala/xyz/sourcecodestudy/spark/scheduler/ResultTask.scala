@@ -25,6 +25,6 @@ class ResultTask[T, U](
 
   @transient override def preferredLocations: Seq[TaskLocation] = Nil // if (locs == null) Nil else locs.toSet.toSeq
 
-  override def toString(): String = s"ResultTask($stageId, $partitionId)"
+  override def toString(): String = s"ResultTask(stageId = $stageId, partitionId = $partitionId)"
 
 }

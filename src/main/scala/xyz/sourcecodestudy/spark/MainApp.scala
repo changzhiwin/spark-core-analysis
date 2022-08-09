@@ -11,8 +11,8 @@ object MainApp extends Logging {
 
     val rdd = sc.parallelize(Seq("aa", "A", "bb", "B", "cc", "C", "dd", "D", "X"), 3)
 
-    rdd.foreachPartition(iter => println(iter.toSeq))
+    rdd.foreachPartition(iter => println(s"${Thread.currentThread().getName}, ${iter.toSeq}"))
 
-    rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(iter.toSeq)))
+    rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(s"${Thread.currentThread().getName}, ${iter.toSeq}")))
   }
 }

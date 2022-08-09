@@ -6,11 +6,11 @@ class TaskSet(
     val attempt: Int,
     val priority: Int) {
 
-  val id: String = s"${stageId}.${attempt}"
+  val id: String = s"stageId = ${stageId}, attempt = ${attempt}"
 
   def kill(interruptThread: Boolean): Unit = {
     tasks.foreach(_.kill(interruptThread))
   }
 
-  override def toString: String = s"TaskSet ${id}"
+  override def toString: String = s"TaskSet(${id})"
 }

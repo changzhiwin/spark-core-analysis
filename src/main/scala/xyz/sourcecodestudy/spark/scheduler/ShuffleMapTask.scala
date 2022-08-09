@@ -54,5 +54,5 @@ class ShuffleMapTask(
     s"local-shuffle-${dep.shuffleId}-part-${_partitionId}"
   }
 
-  override def toString = s"ShuffleMapTask(${stageId}, ${partitionId})"
+  override def toString = s"ShuffleMapTask(stageId = ${stageId}, partitionId = ${partitionId})"
 }

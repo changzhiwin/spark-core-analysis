@@ -25,7 +25,7 @@ abstract class RDD[T: ClassTag](
 
   val id: Int = sc.newRddId()
 
-  logger.info(s"New RDD($id) dependencies = ${dependencies.size}")
+  logger.info(s"New rdd($id) dependencies = ${deps}")
 
   protected def getPartitions: Array[Partition]
 
@@ -36,9 +36,14 @@ abstract class RDD[T: ClassTag](
 
   protected def getDependencies: Seq[Dependency[_]] = deps
 
+  private var dependencies_ : Seq[Dependency[_]] = null
+
   final def dependencies: Seq[Dependency[_]] = {
     // TODO: checkpoint
-    getDependencies
+    if (dependencies_ == null) {
+      dependencies_ = getDependencies
+    }
+    dependencies_
   }
 
   protected def firstParent[U: ClassTag]: RDD[U] = {

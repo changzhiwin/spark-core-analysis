@@ -20,7 +20,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val conf = config.clone()
 
-  val master = conf.get("spark.master", "local")
+  val master = conf.get("spark.master", "local[2]")
   
   val isLocal = master.startsWith("local")
 
@@ -92,8 +92,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def newShuffledId(): Int = nextShuffledId.getAndIncrement()
   def newRddId(): Int = nextRddId.getAndIncrement()
 
-
-
   def defaultParallelism: Int = taskScheduler.defaultParallelism()
 
   def version = SparkContext.SPARK_VERSION
@@ -132,7 +130,6 @@ object SparkContext extends Logging {
   }
 
   implicit def rddToPairRDDFunction[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)])(implicit ord: Ordering[K] = null) = {
-    logger.info("implicit call rddToPairRDDFunction[K, V]")
     new PairRDDFunctions(rdd)
   }
 }

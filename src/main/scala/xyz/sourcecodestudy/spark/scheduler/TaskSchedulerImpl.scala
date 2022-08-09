@@ -52,7 +52,7 @@ class TaskSchedulerImpl(
   override def submitTasks(taskSet: TaskSet): Unit = {
 
     val tasks = taskSet.tasks
-    logger.info(s"Adding task set ${taskSet.id} with ${tasks.length} tasks")
+    logger.info(s"Adding task ${taskSet} with ${tasks.length} tasks")
 
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures = 0 )
@@ -68,18 +68,18 @@ class TaskSchedulerImpl(
   def taskSetFinished(manager: TaskSetManager): Unit = {
     synchronized {
       activeTaskSets -= manager.taskSet.id
-      logger.info(s"TaskSet ${manager.taskSet.id}, whose tasks have all completed")
+      logger.info(s"${manager.name}, whose tasks have all completed")
     }
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
-    logger.info(s"Cancelling stage ${stageId}")
+    logger.info(s"Cancelling stage(${stageId})")
     
     activeTaskSets.find(_._2.stageId == stageId).foreach {
       case (_, tsm) => {
         tsm.runningTaskSet.foreach { taskId => backend.killTask(taskId, interruptThread) }
 
-        val message = s"Stage ${stageId} was cancelled"
+        val message = s"stage(${stageId}) was cancelled"
         tsm.abort(message)
         logger.info(message)
       }
@@ -139,7 +139,7 @@ class TaskSchedulerImpl(
     //  taskIdToTaskSetId: HashMap[Long, String]
 
     synchronized {
-      logger.info(s"statusUpdate call taskId ${taskId}, state = ${state}")
+      logger.info(s"statusUpdate call task(${taskId}), state = ${state}")
       try {
         taskIdToTaskSetId.get(taskId) match {
           case Some(taskSetId) =>
@@ -154,7 +154,7 @@ class TaskSchedulerImpl(
                   case TaskState.FINISHED =>
                     taskSetMgr.handleSuccessfulTask(taskId, new DirectTaskResult(serializedData, null))
                   case TaskState.RUNNING  =>
-                    logger.info(s"Task(${taskId}) is running state")
+                    logger.info(s"Task(${taskId}) is running state, nothing")
                   case _                  =>
                     // 需要反序列化成TaskEndReason对象，当前支持了TaskKilled, ExceptionFailure
                     // TODO，反序列化有可能失败

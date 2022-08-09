@@ -11,8 +11,8 @@ class ShuffledRDDPartition(idx: Int) extends Partition {
 }
 
 class ShuffledRDD[K, V, P: ClassTag](val prev: RDD[P], part: Partitioner) 
-    extends RDD[P](prev.context, Seq(new ShuffleDependency(prev.asInstanceOf[RDD[(K, V)]], part, null))) {
-    //extends RDD[P](prev.context, Nil) {
+    //extends RDD[P](prev.context, Seq(new ShuffleDependency(prev.asInstanceOf[RDD[(K, V)]], part, null))) {
+    extends RDD[P](prev.context, Nil) {
   
   private var serializer: Serializer = _
 
@@ -21,14 +21,14 @@ class ShuffledRDD[K, V, P: ClassTag](val prev: RDD[P], part: Partitioner)
     this
   }
 
-  // 为啥每次要new？
-  //override protected def getDependencies: Seq[Dependency[_]] = {
-    //List(new ShuffleDependency[K, V](prev.asInstanceOf[RDD[(K, V)]], part, serializer))
-  //}
+  // 为啥每次要new？用于子类实现，对外暴漏的是dependencies（里面做了类似lazy处理）
+  override protected def getDependencies: Seq[Dependency[_]] = {
+    List(new ShuffleDependency[K, V](prev.asInstanceOf[RDD[(K, V)]], part, serializer))
+  }
 
   override val partitioner = Some(part)
 
-  override def getPartitions: Array[Partition] = {
+  override protected def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
   }
 

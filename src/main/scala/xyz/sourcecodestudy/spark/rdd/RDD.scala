@@ -71,6 +71,13 @@ abstract class RDD[T: ClassTag](
 
   def flatMap[U: ClassTag](f: T => IterableOnce[U]): RDD[U] = new FlatMappedRDD(this, sc.clean(f))
 
+  def mapPartitionsWithContext[U: ClassTag](
+      f: (TaskContext, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = {
+    val func = (context: TaskContext, index: Int, iter: Iterator[T]) => f(context, iter)
+    new MapPartitionsRDD(this, sc.clean(func), preservesPartitioning)
+  }
+
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
   def reHashPartition[K: ClassTag](f: T => K, numPartitions: Int)(implicit ord: Ordering[K] = null): RDD[(K, T)] = {

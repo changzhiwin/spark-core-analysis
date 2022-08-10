@@ -9,7 +9,7 @@ case class Aggregator[K, V, C] (
 
   private val externalSorting = false
 
-  def combineValueByKey(iter: Iterator[(K, V)], context: TaskContext): Iterator[(K, C)] = {
+  def combineValuesByKey(iter: Iterator[(K, V)], context: TaskContext): Iterator[(K, C)] = {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K, C]
       var kv: (K, V) = null

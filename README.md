@@ -11,6 +11,40 @@ sbt run
 
 # 进展
 
+## 0810
+1，支持groupByKey/count操作
+```
+def main(args: Array[String]) = {
+
+  val sc = new SparkContext()
+  logger.trace(s"Enter application, master = ${sc.master}")
+
+  val rdd0 = sc.parallelize(Seq("a", "aa", "aaa", "aaaa", "aaa", "aaa", "aa", "aaaa", "aaaa", "aaaa"), 3)
+
+  //.foreachPartition(p => println(s"part ${p.toSeq}"))
+  rdd0.map(k => (k, 1.toLong)).count().foreach(p => println(s"count ${p._1} -> ${p._2}")) 
+
+  val rdd1 = sc.parallelize(Seq("aa" -> 1, "bb" -> 2, "aa" -> 3, "bc" -> 4, "bc" -> 5, "cc" -> 6, "ac" -> 7, "ac" -> 8, "ab" -> 9), 3)
+
+  rdd1.groupByKey(2).foreach(p => println(s"group ${p._1} -> ${p._2.toSeq}"))
+}
+
+// Output
+[info] running xyz.sourcecodestudy.spark.MainApp 
+count aaaa -> 4
+count a -> 1
+count aaa -> 3
+count aa -> 2
+group ab -> List(9)
+group bc -> List(4, 5)
+group bb -> List(2)
+group aa -> List(1, 3)
+group cc -> List(6)
+group ac -> List(7, 8)
+[success] Total time: 4 s, completed 2022-8-10 15:17:35
+```
+2，增加unit test内容
+
 ## 0808
 1，完成shuffle逻辑，支持repartition
 ```
@@ -26,7 +60,7 @@ def main(args: Array[String]) = {
   rdd.reHashPartition(n => n.size, 2).map(e => e._2).foreachPartition((iter => println(s"${Thread.currentThread().getName}, ${iter.toSeq}")))
 }
 
-// output
+// Output
 [info] running xyz.sourcecodestudy.spark.MainApp 
 Executor task lauch worker-0, List(aa, A, bb)
 Executor task lauch worker-1, List(B, cc, C)
@@ -53,7 +87,7 @@ object MainApp extends Logging {
   }
 }
 
-// output
+// Output
 2022-08-04 19:01:04 ERROR MainApp$: Result = ArraySeq(60, 70, 80, 90)
 2022-08-04 19:01:05 ERROR MainApp$: lens = ArraySeq(5, 6, 5)
 [success] Total time: 2 s, completed 2022-8-4 19:01:05

@@ -8,7 +8,8 @@ val CirceVersion  = "0.14.2"
 val Http4sVersion = "0.22.0"
 
 libraryDependencies ++= Seq(
-  "org.scalatest" %% "scalatest" % "3.2.11" % "test",
+  "org.scalatest" %% "scalatest" % "3.2.13" % "test",
+  // "org.scalacheck" %% "scalacheck" % "1.15.4" % "test",
 
   "org.apache.logging.log4j" %% "log4j-api-scala" % "12.0",
   "org.apache.logging.log4j" % "log4j-api" % "2.17.2",

@@ -3,6 +3,8 @@
 于是动手起了这个项目，定了个小目标：实现RDD的逻辑。在实操的过程中，也确实了解更多的代码细节，填补了一些盲点。
 
 ## 如何开始的
+> "The Spark core engine itself has changed little since it was first released" -- Spark The Definitive Guide
+
 说实话，直接从最新的代码库开始，是有些困难的（代码量庞大）；而且core部分理念变化不大，如是找了较老的版本来开始，参考了如下两个
 - [commit](https://github.com/apache/spark/tree/5b021ce0990ec675afc6939cc2c06f041c973d17)
 - [tag v1.0.0](https://github.com/apache/spark/tree/v1.0.0/)

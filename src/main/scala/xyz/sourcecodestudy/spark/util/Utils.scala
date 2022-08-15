@@ -6,6 +6,7 @@ import java.util.concurrent.{Executors, ThreadPoolExecutor}
 
 import org.apache.logging.log4j.scala.Logging
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import scala.util.control.NonFatal
 
 object Utils extends Logging {
 
@@ -36,7 +37,18 @@ object Utils extends Logging {
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
-  // scalastyle:off classforname
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException =>
+        throw e
+      case NonFatal(e) =>
+        throw e
+    }
+  }
+
+  // ClosureCleaner用到下面的方法，非核心逻辑，暂不关注
   /**
    * Preferred alternative to Class.forName(className), as well as
    * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.

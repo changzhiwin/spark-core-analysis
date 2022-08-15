@@ -106,4 +106,18 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])(implicit ord
     val cleanF = self.context.clean(f)
     new MappedValuesRDD[K, V, U](self, cleanF) //
   }
+
+  // 元方法，join基于该方法构建
+  def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Iterable[V], Iterable[W]))] = {
+    val cg = new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(K, _)]], other.asInstanceOf[RDD[(K, _)]]), partitioner)
+
+    cg.mapValues { case Array(vs, w1s) =>
+      (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
+    }
+  }
+
+  def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
+    val numPartitions = if (self.partitions.size > other.partitions.size) self.partitions.size else other.partitions.size
+    cogroup(other, new HashPartitioner(numPartitions))
+  }
 }

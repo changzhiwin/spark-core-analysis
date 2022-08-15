@@ -27,11 +27,18 @@ abstract class RDD[T: ClassTag](
 
   logger.info(s"New rdd($id) dependencies = ${deps}")
 
+
+  //---下面对Partition、Dependency处理方式一样：lazy + override
   protected def getPartitions: Array[Partition]
+
+  private var partitions_ : Array[Partition] = _
 
   final def partitions: Array[Partition] = {
     // TODO: checkpoint
-    getPartitions
+    if (partitions_ == null) {
+      partitions_ = getPartitions
+    }
+    partitions_
   }
 
   protected def getDependencies: Seq[Dependency[_]] = deps
@@ -45,6 +52,7 @@ abstract class RDD[T: ClassTag](
     }
     dependencies_
   }
+  //-------------------------------------------------------------
 
   protected def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]

@@ -85,7 +85,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
           backend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
         case t: Throwable => {
-          logger.error(s"Exeception in task id(${taskId})")
+          logger.error(s"Exeception in task id(${taskId}, ${t.toString} getStackTrace:\n${t.getStackTrace})")
           //val reason = 
           backend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)))
         }

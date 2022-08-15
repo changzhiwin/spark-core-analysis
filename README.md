@@ -34,31 +34,42 @@ sbt test
 def main(args: Array[String]) = {
 
   val sc = new SparkContext()
-  logger.trace(s"Enter application, master = ${sc.master}")
+  logger.info(s"Enter application, master = ${sc.master}")
 
   val rdd0 = sc.parallelize(Seq("a", "aa", "aaa", "aaaa", "aaa", "aaa", "aa", "aaaa", "aaaa", "aaaa"), 3)
 
-  //.foreachPartition(p => println(s"part ${p.toSeq}"))
   rdd0.map(k => (k, 1.toLong)).count().foreach(p => println(s"count ${p._1} -> ${p._2}")) 
 
   val rdd1 = sc.parallelize(Seq("aa" -> 1, "bb" -> 2, "aa" -> 3, "bc" -> 4, "bc" -> 5, "cc" -> 6, "ac" -> 7, "ac" -> 8, "ab" -> 9), 3)
 
   rdd1.groupByKey(2).foreach(p => println(s"group ${p._1} -> ${p._2.toSeq}"))
+
+  val rdd2 = sc.parallelize(Seq("aa" -> 10, "bb" -> 20, "aa" -> 30, "bc" -> 40, "bc" -> 50, "cc" -> 60, "ac" -> 70, "ac" -> 80, "ab" -> 90), 2)
+
+  rdd2.cogroup(rdd1).foreach{ cg => println(s"k = ${cg._1}, ${cg._2._1.toSeq} | ${cg._2._2.toSeq}") }
+
+  sc.stop()
 }
 
 // Output
 [info] running xyz.sourcecodestudy.spark.MainApp 
+count aaa -> 3
 count aaaa -> 4
 count a -> 1
-count aaa -> 3
 count aa -> 2
-group ab -> List(9)
-group bc -> List(4, 5)
 group bb -> List(2)
 group aa -> List(1, 3)
+group ab -> List(9)
 group cc -> List(6)
+group bc -> List(4, 5)
 group ac -> List(7, 8)
-[success] Total time: 4 s, completed 2022-8-10 15:17:35
+k = bb, List(20) | List(2)
+k = ac, List(70, 80) | List(7, 8)
+k = ab, List(90) | List(9)
+k = cc, List(60) | List(6)
+k = aa, List(10, 30) | List(1, 3)
+k = bc, List(40, 50) | List(4, 5)
+[success] Total time: 4 s, completed 2022-8-15 23:27:14
 ```
 
 # TODOs（还有很多特性没有实现...）

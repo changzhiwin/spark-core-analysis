@@ -81,21 +81,24 @@ class CoGroupedRDD[K: ClassTag](val rdds: Seq[RDD[(K, _)]], part: Partitioner)
         val ser = Serializer.getSerializer(serializer)
         val it = SparkEnv.get.shuffleFetcher.fetch[(K, Any)](shuffle.shuffleId, split.index, context, ser)
         rddIterators += ((it, depNum))
+      case _  =>
     }
 
     // 转换成Iterable[(K, CoGroupValue)]
-    val allKv = for {
+    /*
+    val its = for {
       (it, depNum) <- rddIterators
       pair <- it
     } yield (pair._1, new CoGroupValue(pair._2, depNum))
-    /*
+    */
+    
     val its = rddIterators.flatMap { case (it, depNum) =>
-      it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum)))//.asInstanceOf[Iterable[(K, CoGroupValue)]]
-    }*/
+      it.map(pair => (pair._1, new CoGroupValue(pair._2, depNum)))
+    }
 
     // 这里使用了纯内存的聚合
     val agg = createAggretor(numRdds)
-    val ret = agg.combineValuesByKey(allKv.iterator, context)
+    val ret = agg.combineValuesByKey(its.iterator, context)
     ret.asInstanceOf[Iterator[(K, Array[Iterable[_]])]]
   }
 
@@ -113,10 +116,11 @@ class CoGroupedRDD[K: ClassTag](val rdds: Seq[RDD[(K, _)]], part: Partitioner)
     * +------------------------------
     * 完成了两个关键动作：
     * 1，把值给combine了
-    * 2，同时区分开，归属不同rdd
+    * 2，同时区分开值，归属于不同rdd
     */
   private def createAggretor(numRdds: Int): Aggregator[K, CoGroupValue, CoGroupCombiner] = {
     val createCombiner: (CoGroupValue => CoGroupCombiner) = value => {
+      // 这个数组是合并的关键
       val newCombiner = Array.fill(numRdds)(new CoGroup)
       newCombiner(value._2) += value._1
       newCombiner

@@ -5,9 +5,12 @@ import java.util.concurrent.atomic.AtomicInteger
 //import java.util.UUID.randomUUID
 
 import org.apache.logging.log4j.scala.Logging
+import org.apache.commons.io.FileUtils
+import java.io.File
 
 import scala.reflect.ClassTag
 import scala.language.implicitConversions
+//import scala.sys.process._
 
 import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD, PairRDDFunctions}
 import xyz.sourcecodestudy.spark.scheduler.{TaskScheduler, TaskSchedulerImpl, DAGScheduler}
@@ -17,6 +20,10 @@ import xyz.sourcecodestudy.spark.util.ClosureCleaner
 class SparkContext(config: SparkConf) extends Logging {
 
   def this() = this(new SparkConf())
+
+  // location of shuffle temp dir
+  val file = new File("./data/shuffled")
+  if (!file.exists()) FileUtils.forceMkdir(file)
 
   val conf = config.clone()
 
@@ -93,6 +100,11 @@ class SparkContext(config: SparkConf) extends Logging {
   def newRddId(): Int = nextRddId.getAndIncrement()
 
   def defaultParallelism: Int = taskScheduler.defaultParallelism()
+
+  def stop(): Unit = {
+    if (file.exists()) FileUtils.deleteDirectory(file)
+    //FileUtils.deleteDirectory(file)
+  }
 
   def version = SparkContext.SPARK_VERSION
 }

@@ -6,13 +6,13 @@ import scala.reflect.ClassTag
 import xyz.sourcecodestudy.spark.SparkConf
 import xyz.sourcecodestudy.spark.util.RpcUtils
 
-private class RpcAbortException(message: String) extends Exception(message)
+private[spark] class RpcAbortException(message: String) extends Exception(message)
 
-private class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
+private[spark] class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
   def abort(t: Throwable): Unit = onAbort(t)
 }
 
-private abstract class RpcEndpointRef(conf: SparkConf) extends Serializable {
+private[spark] abstract class RpcEndpointRef(conf: SparkConf) extends Serializable {
   
   val defaultAskTimeout = RpcUtils.askRpcTimeout(null.asInstanceOf[SparkConf])
 
@@ -30,7 +30,7 @@ private abstract class RpcEndpointRef(conf: SparkConf) extends Serializable {
 
   def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultAskTimeout)
 
-  def askSync[T: ClassTag](message: Any): T = askAsync(message, defaultAskTimeout)
+  def askSync[T: ClassTag](message: Any): T = askSync(message, defaultAskTimeout)
 
   def askSync[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
     val future = ask[T](message, timeout)

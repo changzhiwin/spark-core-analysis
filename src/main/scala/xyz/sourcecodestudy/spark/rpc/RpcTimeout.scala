@@ -1,13 +1,13 @@
 package xyz.sourcecodestudy.spark.rpc
 
-import scala.concurrent.{Awaitable, Future}
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{Future}
+import scala.concurrent.duration.{FiniteDuration}
 import scala.util.control.NonFatal
 import scala.concurrent.duration._
 
 import java.util.concurrent.TimeoutException
 
-import xyz.sourcecodestudy.spark.SparkException
+import xyz.sourcecodestudy.spark.{SparkConf, SparkException}
 import xyz.sourcecodestudy.spark.util.SparkFatalException
 
 class RpcTimeoutException(message: String, cause: TimeoutException) extends TimeoutException(message) {
@@ -23,7 +23,7 @@ class RpcTimeout(val duration: FiniteDuration, val timeoutProp: String) extends 
   def addMessageIfTimeout[T]: PartialFunction[Throwable, T] = {
     case rte: RpcTimeoutException => throw rte
     case te: TimeoutException => throw createRpcTimeoutException(te)
-    case e: _  => throw e
+    case e  => throw e
   }
 
   def awaitResult[T](future: Future[T]): T = {
@@ -37,7 +37,7 @@ class RpcTimeout(val duration: FiniteDuration, val timeoutProp: String) extends 
         throw e.throwable
       case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
         throw new SparkException("Exception thrown in awaitResult: ", t)
-    }.andThen(addMessageIfTimeout)
+    }//.andThen(addMessageIfTimeout)
   }
 }
 

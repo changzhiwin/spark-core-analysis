@@ -1,12 +1,10 @@
 package xyz.sourcecodestudy.spark.rpc
 
-import xyz.sourcecodestudy.spark.SparkException
-
 case class RpcEndpointAddress(rpcAddress: RpcAddress, name: String) {
   require(name != null, "RpcEndpoint name must be provided")
 
   def this(host: String, port: Int, name: String) = {
-    this(RpcAddress(hsot, port), name)
+    this(RpcAddress(host, port), name)
   }
 
   override def toString(): String = rpcAddress match {

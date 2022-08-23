@@ -1,8 +1,9 @@
 package xyz.sourcecodestudy.spark.rpc
 
 import xyz.sourcecodestudy.spark.SparkConf
+import xyz.sourcecodestudy.spark.rpc.netty.{NettyRpcEnvFactory}
 
-case class RpcEvnConfig(
+case class RpcEnvConfig(
     conf: SparkConf,
     name: String,
     bindAddress: String,
@@ -16,14 +17,14 @@ object RpcEnv {
       port: Int,
       conf: SparkConf,
       numUsableCores: Int): RpcEnv = {
-    val config = RpcEvnConfig(conf, name, host, port, numUsableCores)
+    val config = RpcEnvConfig(conf, name, host, port, numUsableCores)
     new NettyRpcEnvFactory().create(config)
   }
 }
 
 abstract class RpcEnv(conf: SparkConf) {
 
-  private def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
+  def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef
 
   def address: RpcAddress
 
@@ -37,6 +38,5 @@ abstract class RpcEnv(conf: SparkConf) {
   def awaitTermination(): Unit
 
   def deserialize[T](deserAction: () => T): T
-
 }
 

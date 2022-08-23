@@ -3,7 +3,6 @@ package xyz.sourcecodestudy.spark.rpc
 import xyz.sourcecodestudy.spark.SparkException
 
 trait RpcEnvFactory {
-
   def create(config: RpcEnvConfig): RpcEnv
 }
 

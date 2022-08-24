@@ -10,11 +10,10 @@ import java.io.File
 
 import scala.reflect.ClassTag
 import scala.language.implicitConversions
-//import scala.sys.process._
 
 import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD, PairRDDFunctions}
 import xyz.sourcecodestudy.spark.scheduler.{TaskScheduler, TaskSchedulerImpl, DAGScheduler}
-import xyz.sourcecodestudy.spark.scheduler.local.LocalBackend
+import xyz.sourcecodestudy.spark.scheduler.local.{LocalSchedulerBackend} // LocalBackend
 import xyz.sourcecodestudy.spark.util.ClosureCleaner
 
 class SparkContext(config: SparkConf) extends Logging {
@@ -125,14 +124,14 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(scheduler, 1)
+        val backend = new LocalSchedulerBackend(scheduler, 1) // new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
         scheduler
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount = Runtime.getRuntime.availableProcessors()
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(scheduler, 1) // new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
       //case SPARK_REGEX(sparkUrl) =>

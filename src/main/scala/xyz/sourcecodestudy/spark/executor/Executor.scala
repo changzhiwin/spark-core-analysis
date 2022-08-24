@@ -36,6 +36,10 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
     }
   }
 
+  def stop(): Unit = {
+    threadPool.shutdown()
+  }
+
   // TaskRunner define
   class TaskRunner(backend: SchedulerBackend, taskId: Long, serializedTask: ByteBuffer) extends Runnable {
 

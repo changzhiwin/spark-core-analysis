@@ -1,15 +1,15 @@
 package xyz.sourcecodestudy.spark.rpc
 
-case class RpcEndpointAddress(rpcAddress: RpcAddress, name: String) {
+case class RpcEndpointAddress(rpcAddress: Option[RpcAddress], name: String) {
   require(name != null, "RpcEndpoint name must be provided")
 
   def this(host: String, port: Int, name: String) = {
-    this(RpcAddress(host, port), name)
+    this(Some(RpcAddress(host, port)), name)
   }
 
   override def toString(): String = rpcAddress match {
-    case null => s"spark://${name}@${rpcAddress.host}:${rpcAddress.port}"
-    case _    => s"spark-client://${name}"
+    case Some(addr) => s"spark://${name}@${addr.host}:${addr.port}"
+    case None    => s"spark-client://${name}"
   }
 }
 

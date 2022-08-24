@@ -113,7 +113,7 @@ private class SharedMessageLoop(conf: SparkConf, dispatcher: Dispatcher, numUsab
   // 一旦注册到MessageLoop，就是这个Inbox处于活跃状态
   def register(name: String, endpoint: RpcEndpoint): Unit = {
     val inbox = new Inbox(name, endpoint)
-    endpoint.put(name, inbox)
+    endpoints.put(name, inbox)
     setActive(inbox)
   }
 }

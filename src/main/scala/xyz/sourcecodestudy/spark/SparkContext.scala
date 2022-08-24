@@ -103,7 +103,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   def stop(): Unit = {
     if (file.exists()) FileUtils.deleteDirectory(file)
-    //FileUtils.deleteDirectory(file)
+
+    env.stop()
   }
 
   def version = SparkContext.SPARK_VERSION

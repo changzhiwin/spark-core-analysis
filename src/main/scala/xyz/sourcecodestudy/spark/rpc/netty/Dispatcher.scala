@@ -10,7 +10,7 @@ import scala.util.control.NonFatal
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{SparkEnv, SparkException}
-import xyz.sourcecodestudy.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEndpointAddress, RpcEnvStoppedException}
+import xyz.sourcecodestudy.spark.rpc.{RpcEndpoint, IsolatedRpcEndpoint, RpcEndpointRef, RpcEndpointAddress, RpcEnvStoppedException}
 
 class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
   
@@ -22,11 +22,11 @@ class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
   private lazy val sharedLoop = new SharedMessageLoop(nettyEnv.conf, this, numUsableCores)
 
-  @GrardedBy("this")
+  @GuardedBy("this")
   private var stopped = false
 
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
-    val addr = RpcEndpointAddress(nettyEnv.address, name)
+    val addr = RpcEndpointAddress(Some(nettyEnv.address), name)
     val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
 
     synchronized {
@@ -102,6 +102,7 @@ class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
   // 实际投递消息的接口
   private def postMessage(endpointName: String, message: InboxMessage, callbackIfStopped: (Exception) => Unit): Unit = {
+    logger.info(s"postMessage endpointName = ${endpointName}")
     val error = synchronized {
       val loop = endpoints.get(endpointName)
       if (stopped) {

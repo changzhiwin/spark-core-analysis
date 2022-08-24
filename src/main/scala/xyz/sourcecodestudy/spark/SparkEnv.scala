@@ -2,16 +2,33 @@ package xyz.sourcecodestudy.spark
 
 import org.apache.logging.log4j.scala.Logging
 
+import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcEndpoint, RpcEndpointRef}
 import xyz.sourcecodestudy.spark.serializer.Serializer
 import xyz.sourcecodestudy.spark.util.Utils
 
 class SparkEnv(
+    val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val shuffleFetcher: ShuffleFetcher,
     val mapOutputTracker: MapOutputTrackerMaster,
     val conf: SparkConf
-) extends Logging {}
+) extends Logging {
+
+  //var driverTmpDir: Option[String] = None
+
+  var isStopped = false
+
+  def stop(): Unit = {
+
+    if (!isStopped) {
+      isStopped = true
+
+      rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
+    }
+  }
+}
 
 object SparkEnv extends Logging {
 
@@ -40,6 +57,12 @@ object SparkEnv extends Logging {
       }
     }
 
+    val systemName = isDriver match {
+      case true  => "driverSystem-rpc"
+      case false => "executorSystem-rpc"
+    }
+    val rpcEnv = RpcEnv.create(systemName, "127.0.0.1", 9999, conf, 1)
+
     val serializer = instantiateClass[Serializer]("spark.serializer", 
       "xyz.sourcecodestudy.spark.serializer.JavaSerializer")
 
@@ -51,7 +74,7 @@ object SparkEnv extends Logging {
 
     val mapOutputTracker = new MapOutputTrackerMaster(conf)
 
-    new SparkEnv(serializer, closureSerializer, shuffleFetcher, mapOutputTracker, conf)
+    new SparkEnv(rpcEnv, serializer, closureSerializer, shuffleFetcher, mapOutputTracker, conf)
   }
 
 }

@@ -1,5 +1,7 @@
 package xyz.sourcecodestudy.spark.rpc.netty
 
+import javax.annotation.concurrent.GuardedBy
+
 import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.scala.Logging
@@ -34,16 +36,16 @@ private case class RemoteProcessConnectionError(cause: Throwable, remoteAddress:
 private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends Logging {
   inbox => // 
 
-  @GrardedBy("this")
+  @GuardedBy("this")
   protected val messages = new java.util.LinkedList[InboxMessage]()
 
-  @GrardedBy("this")
+  @GuardedBy("this")
   private var stopped = false
 
-  @GrardedBy("this")
+  @GuardedBy("this")
   private var enableConcurrent = false
 
-  @GrardedBy("this")
+  @GuardedBy("this")
   private var numActiveThreads = 0
 
   // 初始化一个启动的消息
@@ -58,7 +60,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
 
       if (!enableConcurrent && numActiveThreads != 0) return
 
-      message = message.poll()
+      message = messages.poll()
       if (message != null) {
         numActiveThreads += 1
       } else {
@@ -142,7 +144,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
     }
   }
 
-  def isEmpty: Boolean = index.synchronized { message.isEmpty }
+  def isEmpty: Boolean = inbox.synchronized { messages.isEmpty }
 
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
 

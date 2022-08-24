@@ -16,7 +16,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf) extends Serializab
   
   val defaultAskTimeout = RpcUtils.askRpcTimeout(null.asInstanceOf[SparkConf])
 
-  def address: RpcAddress
+  def address: Option[RpcAddress]
 
   def name: String
 

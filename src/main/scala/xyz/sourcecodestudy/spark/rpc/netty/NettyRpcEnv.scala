@@ -3,16 +3,20 @@ package xyz.sourcecodestudy.spark.rpc.netty
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentHashMap
 import java.nio.ByteBuffer
-import java.io.{DataOutputStream, ByteArrayOutputStream}
+import java.io.{OutputStream, DataOutputStream, ByteArrayOutputStream}
 import java.io.{DataInputStream, ByteArrayInputStream}
 
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
+import scala.util.{Try, Success, Failure}
+import scala.concurrent.{Future, Promise}
 
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{SparkConf}
-import xyz.sourcecodestudy.spark.serializer.{JavaSerializer, JavaSerializerInstance}
-import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef, RpcEndpoint}
+import xyz.sourcecodestudy.spark.util.ThreadUtils
+import xyz.sourcecodestudy.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
+import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcTimeout, RpcEnvConfig, RpcEnvFactory}
 import xyz.sourcecodestudy.spark.rpc.{RpcEnv, AbortableRpcFuture, RpcAddress, RpcEndpointAddress, RpcEnvStoppedException}
 
 // Just mock
@@ -52,23 +56,30 @@ class NettyRpcEnv(
   // 暂不实现
   private val outboxes = new ConcurrentHashMap[RpcAddress, Outbox]()
 
-  private def removeOutbox(address: RpcAddress): Unit = {
-    val outbox = outboxes.remove(addrss)
+  private[spark] def removeOutbox(address: RpcAddress): Unit = {
+    val outbox = outboxes.remove(address)
     if (outbox != null) {
-      outbox.stop()
+      //outbox.stop()
     }
   }
 
-  private def send(message: RequestMessage): Unit = {
+  private[spark] def send(message: RequestMessage): Unit = {
+    logger.info(s"[${message.senderAddress}] send [${message.content}], to [${message.receiver.address}]")
     val remoteAddr = message.receiver.address
-    if (remoteAddr == address) {
-      try {
-        dispatcher.postOneWayMessage(message)
-      } catch {
-        case e: RpcEnvStoppedException => logger.debug(e.getMessage)
+
+    remoteAddr match {
+      case Some(addr) => {
+        if (addr == address) {
+          try {
+            dispatcher.postOneWayMessage(message)
+          } catch {
+            case e: RpcEnvStoppedException => logger.debug(e.getMessage)
+          }
+        } else {
+          // remote PRC endpoint
+        }
       }
-    } else {
-      // remote PRC endpoint
+      case None => logger.error(s"RequestMessage remote address is None")
     }
   }
 
@@ -82,7 +93,7 @@ class NettyRpcEnv(
           case re: RpcEnvStoppedException =>
             logger.debug(s"askAbortable -> onFailure_stop, ${re}")
           case _ =>
-            logger.warn(s"askAbortable -> onFailure_, ${re}")
+            logger.warn(s"askAbortable -> onFailure_, ${e}")
         }
       }
     }
@@ -101,17 +112,22 @@ class NettyRpcEnv(
     }
 
     try {
-      if (remoteAddr == address) {
-
-        val p = Promise[Any]()
-        p.future.onComplete {
-          case Success(response) => onSuccess(response)
-          case Failure(e) => onFailure(e)
-        }(ThreadUtils.sameThread)
+      remoteAddr match {
+        case Some(addr) => {
+          // 本地通信，ip、port都相同
+          if (addr == address) {
+            val p = Promise[Any]()
+            p.future.onComplete {
+              case Success(response) => onSuccess(response)
+              case Failure(e) => onFailure(e)
+            }(ThreadUtils.sameThread)
         
-        dispatcher.postLocalMessage(message, p)
-      } else {
-        // TODO outbox
+            dispatcher.postLocalMessage(message, p)
+          } else {
+            // 远程通信 TODO
+          }
+        }
+        case None => logger.error(s"RequestMessage remote address is None")
       }
 
       // 暂未实现超时逻辑，TODO
@@ -132,20 +148,35 @@ class NettyRpcEnv(
   }
 
   override def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = {
-    dispatcher.getRpcEndpointRef(endpint)
+    dispatcher.getRpcEndpointRef(endpoint)
+  }
+
+  private[spark] def serializeStream(out: OutputStream): SerializationStream = {
+    javaSerializerInstance.serializeStream(out)
+  }
+
+  override def deserialize[T](deserAction: () => T): T = {
+    deserAction()
+  }
+
+  def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
+    //deserialize {
+      javaSerializerInstance.deserialize[T](bytes)
+    //}
   }
 
   override def awaitTermination(): Unit = {
     dispatcher.awaitTermination()
   }
 
-  private def serializeStream(out: OutputStream): SerializationStream = {
-    javaSerializerInstance.serializeStream(out)
-  }
+  override def shutdown(): Unit = {
+    if (!stopped.compareAndSet(false, true)) {
+      return
+    }
 
-  private def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
-    // client ?
-    javaSerializerInstance.deserialize[T](bytes)
+    if (dispatcher != null) {
+      dispatcher.stop()
+    }
   }
 }
 
@@ -153,7 +184,7 @@ class NettyRpcEnvFactory extends RpcEnvFactory {
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
     val javaSerializerInstance = new JavaSerializer().newInstance().asInstanceOf[JavaSerializerInstance]
-    val nettyEnv = new NettyRpcEnv(sparkConf, javaSerializerInstance, "127.0.0.1", 1)
+    val nettyEnv = new NettyRpcEnv(sparkConf, javaSerializerInstance, host = config.bindAddress, config.numUsableCores)
     if (false/*!config.clientMode*/) {
       // TODO
     }
@@ -170,8 +201,7 @@ private[spark] class NettyRpcEndpointRef(
 
   @transient var client: TransportClient = _
 
-  // 避免null的使用
-  override def address: Option[RpcAddress] = Option(endpointAddress.rpcAddress) 
+  override def address: Option[RpcAddress] = endpointAddress.rpcAddress //Option(endpointAddress.rpcAddress) 
 
   override def name: String = endpointAddress.name
 
@@ -195,7 +225,7 @@ private[spark] class NettyRpcEndpointRef(
     case _ => false
   }
 
-  final override def hasCode(): Int = endpointAddress match {
+  final override def hashCode(): Int = endpointAddress match {
     case null => 0
     case _    => endpointAddress.hashCode()
   }
@@ -241,12 +271,12 @@ private[netty] class RequestMessage(
 
 private[netty] object RequestMessage {
   
-  private def readRpcAddress(in: DataInputStream): RpcAddress = {
+  private def readRpcAddress(in: DataInputStream): Option[RpcAddress] = {
     val hasRpcAddress = in.readBoolean()
     if (hasRpcAddress) {
-      RpcAddress(in.readUTF(), in.readInt())
+      Some(RpcAddress(in.readUTF(), in.readInt()))
     } else {
-      null
+      None
     }
   }
 
@@ -255,7 +285,10 @@ private[netty] object RequestMessage {
     val in = new DataInputStream(bis)
 
     try {
-      val senderAddress = readRpcAddress(in)
+      val senderAddress = readRpcAddress(in) match {
+        case Some(addr) => addr
+        case None       => throw new IllegalStateException("senderAddress must be have")
+      }
       val endpointAddress = RpcEndpointAddress(readRpcAddress(in), in.readUTF())
       val ref = new NettyRpcEndpointRef(nettyEnv.conf, endpointAddress, nettyEnv)
       ref.client = client

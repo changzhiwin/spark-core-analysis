@@ -13,6 +13,8 @@
 - Java 1.8
 - Scala 2.13.8
 ```
+// master is developing
+git checkout v0.1.0-local-sync
 sbt run
 sbt test
 ```
@@ -29,6 +31,7 @@ sbt test
 ## 实现的程度
 - 目前只支持单机版本
 - 完整的RDD核心逻辑（DGA、Shuffle、Aggregator）
+- rpc实现中
 ```
 // MainApp.scala
 def main(args: Array[String]) = {
@@ -73,6 +76,6 @@ k = bc, List(40, 50) | List(4, 5)
 ```
 
 # TODOs（还有很多特性没有实现...）
-- 支持集群
+- 支持rpc，doing
 - 支持cache
 - 支持checkpoint

@@ -3,6 +3,7 @@ package xyz.sourcecodestudy.spark
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.SparkContext._
+import xyz.sourcecodestudy.spark.rpc.demo.Foobar
 
 object MainApp extends Logging {
 

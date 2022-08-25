@@ -14,13 +14,15 @@ import scala.concurrent.{Future, Promise}
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{SparkConf}
-import xyz.sourcecodestudy.spark.util.ThreadUtils
+import xyz.sourcecodestudy.spark.util.{ThreadUtils, ByteBufferInputStream}
 import xyz.sourcecodestudy.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcTimeout, RpcEnvConfig, RpcEnvFactory}
 import xyz.sourcecodestudy.spark.rpc.{RpcEnv, AbortableRpcFuture, RpcAddress, RpcEndpointAddress, RpcEnvStoppedException}
 
-// Just mock
-class TransportClient
+import org.apache.spark.network.client.{TransportClient, TransportClientBootstrap}
+import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
+import org.apache.spark.network.util.{TransportConf, ConfigProvider}
+import org.apache.spark.network.{TransportContext}
 
 class NettyRpcEnv(
     val conf: SparkConf, 
@@ -30,15 +32,14 @@ class NettyRpcEnv(
   
   val role = "executor"
 
-  private var server = null // TransportServer
+  private var server: Option[TransportServer] = None
 
   private val stopped = new AtomicBoolean(false)
 
   override lazy val address: RpcAddress = {
     server match {
-      // 暂未实现服务端
-      case null => RpcAddress(host, 9999) //server.getPort())
-      case _    => null
+      case Some(_) => RpcAddress(host, 9999) //server.getPort())
+      case None    => throw new SparkException("Get lazy address failed.")
     }
   }
 
@@ -57,9 +58,9 @@ class NettyRpcEnv(
   private val outboxes = new ConcurrentHashMap[RpcAddress, Outbox]()
 
   private[spark] def removeOutbox(address: RpcAddress): Unit = {
-    val outbox = outboxes.remove(address)
-    if (outbox != null) {
-      //outbox.stop()
+    val outbox = Option(outboxes.remove(address))
+    if (outbox != None) {
+      outbox.get.stop()
     }
   }
 
@@ -174,9 +175,60 @@ class NettyRpcEnv(
       return
     }
 
+    val iter = outboxs.values().iterator
+    while (iter.hasNext()) {
+      val outbox = iter.next()
+      outboxs.remove(outbox.address)
+      outbox.stop()
+    }
+
     if (dispatcher != null) {
       dispatcher.stop()
     }
+
+    if (clientConnectionExecutor != None) {
+      clientConnectionExecutor.shutdownNow()
+    }
+  }
+
+  // 以下都是处理网络请求的逻辑
+
+  val transportConf = new TransportConf("rpc", new ConfigProvider {
+    // 
+    override def get(name: String): String = ""
+    override def get(name: String, defaultValue: String): String = ""
+    override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
+      Map[String, String]().asJava.entrySet()
+    }
+  })
+
+  // Just mock, have not real action
+  val streamManager = new NettyStreamManager()
+
+  private val transportContext = new TransportContext(transportConf, 
+    new NettyRpcHandler(dispatcher, this, streamManager))
+
+  // 使用一个连接池处理连接过程，默认配置spark.rpc.connect.threads = 64
+  private[netty] val clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connection", 4)
+
+  private def createClientBootstraps(): java.util.List[TransportClientBootstrap] = {
+    java.util.Collections.emptyList[TransportClientBootstrap]
+  }
+
+  private val clientFactory = transportContext.createClientFactory(createClientBootstraps())
+
+  private[netty] def createClient(address: RpcAddress): TransportClient = {
+    clientFactory.createClient(address.host, address.port)
+  }
+
+  def startServer(bindAddress: String, port: Int): Unit = {
+    val bootstraps: java.util.List[TransportServerBootstrap] = java.util.Collections.emptyList[TransportServerBootstrap]
+    server = transportContext.createServer(bindAddress, port, bootstraps)
+    // TODO
+    dispatcher.registerRpcEndpoint(
+      RpcEndpointVerifier.Name,
+      new RpcEndpointVerifier(this, dispatcher)
+    )
   }
 }
 
@@ -281,7 +333,8 @@ private[netty] object RequestMessage {
   }
 
   def apply(nettyEnv: NettyRpcEnv, client: TransportClient, bytes: ByteBuffer): RequestMessage = {
-    val bis = new ByteArrayInputStream(bytes.array())
+    // byte是有状态的，如果转换成array，就不能更新数据指针了
+    val bis = new ByteBufferInputStream(bytes) //new ByteArrayInputStream(bytes.array())
     val in = new DataInputStream(bis)
 
     try {
@@ -295,7 +348,7 @@ private[netty] object RequestMessage {
       new RequestMessage(
         senderAddress,
         ref, 
-        nettyEnv.deserialize(client, bytes)
+        nettyEnv.deserialize(client, bytes) // 剩下的byte是消息体
       )
     } finally {
       in.close()

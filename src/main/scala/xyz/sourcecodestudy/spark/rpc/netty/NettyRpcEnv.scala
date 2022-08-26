@@ -10,10 +10,11 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 import scala.util.{Try, Success, Failure}
 import scala.concurrent.{Future, Promise}
+import scala.collection.JavaConverters._
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.{SparkConf}
+import xyz.sourcecodestudy.spark.{SparkConf, SparkException}
 import xyz.sourcecodestudy.spark.util.{ThreadUtils, ByteBufferInputStream}
 import xyz.sourcecodestudy.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcTimeout, RpcEnvConfig, RpcEnvFactory}
@@ -54,7 +55,6 @@ class NettyRpcEnv(
     dispatcher.stop(endpointRef)
   }
 
-  // 暂不实现
   private val outboxes = new ConcurrentHashMap[RpcAddress, Outbox]()
 
   private[spark] def removeOutbox(address: RpcAddress): Unit = {
@@ -175,10 +175,10 @@ class NettyRpcEnv(
       return
     }
 
-    val iter = outboxs.values().iterator
+    val iter = outboxes.values().iterator
     while (iter.hasNext()) {
       val outbox = iter.next()
-      outboxs.remove(outbox.address)
+      outboxes.remove(outbox.address)
       outbox.stop()
     }
 
@@ -223,10 +223,10 @@ class NettyRpcEnv(
 
   def startServer(bindAddress: String, port: Int): Unit = {
     val bootstraps: java.util.List[TransportServerBootstrap] = java.util.Collections.emptyList[TransportServerBootstrap]
-    server = transportContext.createServer(bindAddress, port, bootstraps)
-    // TODO
+    server = Option(transportContext.createServer(bindAddress, port, bootstraps))
+    // 实现了一个ask指令，通过name检查是否该name的endpoint是否注册
     dispatcher.registerRpcEndpoint(
-      RpcEndpointVerifier.Name,
+      RpcEndpointVerifier.NAME,
       new RpcEndpointVerifier(this, dispatcher)
     )
   }
@@ -237,8 +237,16 @@ class NettyRpcEnvFactory extends RpcEnvFactory {
     val sparkConf = config.conf
     val javaSerializerInstance = new JavaSerializer().newInstance().asInstanceOf[JavaSerializerInstance]
     val nettyEnv = new NettyRpcEnv(sparkConf, javaSerializerInstance, host = config.bindAddress, config.numUsableCores)
-    if (false/*!config.clientMode*/) {
-      // TODO
+    // TODO
+    if (true/*!config.clientMode*/) {
+      try {
+        nettyEnv.startServer(config.bindAddress, config.port)
+      } catch {
+        case e => {
+          nettyEnv.shutdown()
+          throw e
+        }
+      }
     }
     nettyEnv
   }

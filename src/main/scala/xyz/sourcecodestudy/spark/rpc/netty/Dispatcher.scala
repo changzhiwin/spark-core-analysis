@@ -8,6 +8,7 @@ import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.scala.Logging
+import org.apache.spark.network.client.{RpcResponseCallback}
 
 import xyz.sourcecodestudy.spark.{SparkEnv, SparkException}
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpoint, IsolatedRpcEndpoint, RpcEndpointRef, RpcEndpointAddress, RpcEnvStoppedException}
@@ -82,9 +83,9 @@ class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
     }
   }
 
-  //def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
+  def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
     // TODO
-  //}
+  }
 
   def postLocalMessage(message: RequestMessage, p: Promise[Any]): Unit = {
     val rpcCallContext = new LocalNettyRpcCallContext(message.senderAddress, p)

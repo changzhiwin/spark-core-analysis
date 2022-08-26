@@ -1,12 +1,13 @@
 package xyz.sourcecodestudy.spark.rpc.netty
 
 import java.nio.ByteBuffer
-import java.annotation.concurrent.GuardedBy
+import javax.annotation.concurrent.GuardedBy
+import java.util.concurrent.Callable
 
 import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.scala.Logging
-import org.apache.spark.network.client.TransportClient
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 
 import xyz.sourcecodestudy.spark.SparkException
 import xyz.sourcecodestudy.spark.rpc.{RpcAddress, RpcEnvStoppedException}
@@ -35,7 +36,7 @@ case class OneWayOutboxMessage(content: ByteBuffer) extends OutboxMessage with L
 case class RpcOutboxMessage(
     content: ByteBuffer,
     _onFailure: (Throwable) => Unit,
-    _onSuccess: (TransportClient, ByteBuffer) => Unit) extends OutboxMessage with Logging  {
+    _onSuccess: (TransportClient, ByteBuffer) => Unit) extends OutboxMessage with RpcResponseCallback with Logging  {
 
   private var client: Option[TransportClient] = None
   private var requestId: Option[Long] = None
@@ -84,7 +85,7 @@ class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
   outbox =>
 
   @GuardedBy("this")
-  private val messages = new java.util.LinkList[OutboxMessage]
+  private val messages = new java.util.LinkedList[OutboxMessage]
 
   @GuardedBy("this")
   private var client: Option[TransportClient] = None
@@ -147,7 +148,7 @@ class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       try {
         client match {
           case Some(ct) => {
-            message.sendWith(ct)
+            message.get.sendWith(ct)
           }
           case None     => {
             assert(stopped)
@@ -181,7 +182,7 @@ class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
           outbox.synchronized {
             client = Some(_client)
 
-            if (stoped) closeClient()
+            if (stopped) closeClient()
           }
         } catch {
           case ie: InterruptedException => return
@@ -224,7 +225,7 @@ class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       if (stopped) return
 
       stopped = true
-      if (connectFuture != None) connectFuture.cancel(true)
+      if (connectFuture != None) connectFuture.get.cancel(true)
       closeClient()
     }
 
@@ -235,7 +236,7 @@ class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
     var message = Option(messages.poll())
     while (message != None) {
       message.get.onFailure(e)
-      message = messages.poll()
+      message = Option(messages.poll())
     }
     assert(messages.isEmpty)  
   }

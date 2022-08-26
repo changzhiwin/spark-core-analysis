@@ -4,18 +4,19 @@ import java.nio.ByteBuffer
 import java.net.{InetSocketAddress}
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.logging.log4j.scala.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.server.{RpcHandler, StreamManager}
 
 import xyz.sourcecodestudy.spark.SparkException
 import xyz.sourcecodestudy.spark.rpc.{RpcAddress}
-import xyz.sourcecodestudy.spark.rpc.netty.{Dispatcher, NettyRpcEnv}
+import xyz.sourcecodestudy.spark.rpc.netty.{Dispatcher, NettyRpcEnv, RequestMessage}
 
 
 class NettyRpcHandler(
     dispatcher: Dispatcher,
     nettyEnv: NettyRpcEnv,
-    streamManager: StreamManager) extends RpcHandler {
+    streamManager: StreamManager) extends RpcHandler with Logging {
 
   private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
 
@@ -93,7 +94,7 @@ class NettyRpcHandler(
     }   
   }
 
-  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMesage  = {
+  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage  = {
     val addr = client.getSocketAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
 

@@ -21,7 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
-import scala.collection.JavaConverters._
+// import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable.{Map, Set, Stack}
 
 import org.apache.commons.lang3.{ClassUtils, JavaVersion, SystemUtils}

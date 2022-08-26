@@ -78,7 +78,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
               })
             } catch {
               case e: Throwable =>
-                // context.sendFailure(e)
+                context.sendFailure(e)
                 throw e
             }
 

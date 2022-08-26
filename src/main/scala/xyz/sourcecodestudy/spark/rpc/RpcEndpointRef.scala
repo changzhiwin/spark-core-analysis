@@ -6,13 +6,13 @@ import scala.reflect.ClassTag
 import xyz.sourcecodestudy.spark.SparkConf
 import xyz.sourcecodestudy.spark.util.RpcUtils
 
-private[spark] class RpcAbortException(message: String) extends Exception(message)
+class RpcAbortException(message: String) extends Exception(message)
 
-private[spark] class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
+class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
   def abort(t: Throwable): Unit = onAbort(t)
 }
 
-private[spark] abstract class RpcEndpointRef(conf: SparkConf) extends Serializable {
+abstract class RpcEndpointRef(conf: SparkConf) extends Serializable {
   
   val defaultAskTimeout = RpcUtils.askRpcTimeout(null.asInstanceOf[SparkConf])
 

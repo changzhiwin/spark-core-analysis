@@ -3,7 +3,6 @@ package xyz.sourcecodestudy.spark
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.SparkContext._
-import xyz.sourcecodestudy.spark.rpc.demo.Foobar
 
 object MainApp extends Logging {
 
@@ -24,7 +23,7 @@ object MainApp extends Logging {
   
     rdd2.cogroup(rdd1).foreach{ cg => println(s"k = ${cg._1}, ${cg._2._1.toSeq} | ${cg._2._2.toSeq}") }
 
-    sc.stop()
+    sc.env.awaitTermination()
 
   }
 

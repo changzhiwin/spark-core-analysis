@@ -26,14 +26,21 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   def setAll(settings: Iterable[(String, String)]) = {
-    this.setting ++= setting
+    this.setting ++= settings
     this
   }
 
   def getOption(key: String): Option[String] = setting.get(key)
 
+  def get(key: String): String = 
+    setting.getOrElse(key, throw new NoSuchElementException(key))
+
   def get(key: String, defaultValue: String): String = 
     setting.getOrElse(key, defaultValue)
+
+  def getAll: Array[(String, String)] = {
+    setting.toArray
+  }
 
   def contains(key: String): Boolean = setting.contains(key)
 

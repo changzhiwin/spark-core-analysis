@@ -2,7 +2,11 @@ package xyz.sourcecodestudy.spark.rpc.netty
 
 import scala.concurrent.Promise
 
+import org.apache.spark.network.client.{RpcResponseCallback}
+
 import xyz.sourcecodestudy.spark.rpc.{RpcCallContext, RpcAddress}
+import xyz.sourcecodestudy.spark.rpc.netty.NettyRpcEnv
+
 
 abstract class NettyRpcCallContext(override val senderAddress: RpcAddress) extends RpcCallContext {
 
@@ -24,15 +28,12 @@ class LocalNettyRpcCallContext(senderAddress: RpcAddress, p: Promise[Any]) exten
 }
 
 class RemoteNettyRpcCallContext(
-    //nettyEnv: NettyEnv,
-    // callback: RpcResponseCallback,
+    nettyEnv: NettyRpcEnv,
+    callback: RpcResponseCallback,
     senderAddress: RpcAddress)
   extends NettyRpcCallContext(senderAddress) {
-  
   override protected def send(message: Any): Unit = {
-    /*
     val reply = nettyEnv.serialize(message)
     callback.onSuccess(reply)
-    */
   }
 }

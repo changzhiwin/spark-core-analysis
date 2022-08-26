@@ -3,14 +3,14 @@ package xyz.sourcecodestudy.spark.rpc.netty
 import javax.annotation.concurrent.GuardedBy
 import java.util.concurrent.{ConcurrentMap, ConcurrentHashMap, CountDownLatch}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.scala.Logging
 import org.apache.spark.network.client.{RpcResponseCallback}
 
-import xyz.sourcecodestudy.spark.{SparkEnv, SparkException}
+import xyz.sourcecodestudy.spark.{SparkException}
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpoint, IsolatedRpcEndpoint, RpcEndpointRef, RpcEndpointAddress, RpcEnvStoppedException}
 
 class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
@@ -84,10 +84,14 @@ class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
   }
 
   def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
-    // TODO
+    // 自身需要向外发送消息
+    val rpcCallContext = new RemoteNettyRpcCallContext(nettyEnv, callback, message.senderAddress)
+    val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)
+    postMessage(message.receiver.name, rpcMessage, (e) => callback.onFailure(e))
   }
 
   def postLocalMessage(message: RequestMessage, p: Promise[Any]): Unit = {
+    // 自身向自身发送消息
     val rpcCallContext = new LocalNettyRpcCallContext(message.senderAddress, p)
     val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)
     postMessage(message.receiver.name, rpcMessage, (e) => p.tryFailure(e))

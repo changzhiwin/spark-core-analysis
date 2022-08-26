@@ -2,7 +2,7 @@ package xyz.sourcecodestudy.spark
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcEndpoint, RpcEndpointRef}
+import xyz.sourcecodestudy.spark.rpc.{RpcEnv}
 import xyz.sourcecodestudy.spark.serializer.Serializer
 import xyz.sourcecodestudy.spark.util.Utils
 
@@ -27,6 +27,10 @@ class SparkEnv(
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
     }
+  }
+
+  def awaitTermination(): Unit = {
+    rpcEnv.awaitTermination()
   }
 }
 

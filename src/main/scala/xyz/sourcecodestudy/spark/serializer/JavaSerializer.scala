@@ -15,7 +15,7 @@ class JavaSerializer() extends Serializer {
   
 }
 
-private[spark] class JavaSerializerInstance() extends SerializerInstance {
+class JavaSerializerInstance() extends SerializerInstance {
 
   def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
@@ -51,7 +51,7 @@ private[spark] class JavaSerializerInstance() extends SerializerInstance {
 
 }
 
-private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
+class JavaSerializationStream(out: OutputStream) extends SerializationStream {
 
   private val objOut = new ObjectOutputStream(out)
 
@@ -66,7 +66,7 @@ private[spark] class JavaSerializationStream(out: OutputStream) extends Serializ
 
 }
 
-private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader) extends DeserializationStream {
+class JavaDeserializationStream(in: InputStream, loader: ClassLoader) extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) = 

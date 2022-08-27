@@ -24,6 +24,8 @@ class NettyRpcHandler(
       client: TransportClient,
       message: ByteBuffer,
       callback: RpcResponseCallback): Unit = {
+
+    logger.info("receive request and callback")
     
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
@@ -32,6 +34,8 @@ class NettyRpcHandler(
   override def receive(
       client: TransportClient,
       message: ByteBuffer): Unit = {
+      
+    logger.info("receive request only")
     
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postOneWayMessage(messageToDispatch)
@@ -88,7 +92,10 @@ class NettyRpcHandler(
     assert(addr != null)
 
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
+    logger.info(s"internalReceive client address ${clientAddr}")
+
     val requestMessage = RequestMessage(nettyEnv, client, message)
+    logger.info(s"internalReceive remoteEnvAddress ${requestMessage.senderAddress}")
 
     val remoteEnvAddress = requestMessage.senderAddress
     // clientAddr 表示是本次socket连接中远程的ip+port

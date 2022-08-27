@@ -225,7 +225,7 @@ class NettyRpcEnv(
 
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
     // 什么场景会直接send，需要探究
-    if (receiver.client == null) {
+    if (receiver.client != null) {
       message.sendWith(receiver.client)
     } else {
       require(receiver.address != None, "Cannot send message to client endpoint with no listen address")
@@ -322,12 +322,13 @@ case class RpcFailure(e: Throwable)
 
 class NettyRpcEndpointRef(
     @transient private val conf: SparkConf,
-    private val endpointAddress: RpcEndpointAddress,
+    var endpointAddress: RpcEndpointAddress,
+    //private val endpointAddress: RpcEndpointAddress,
     @transient private var nettyEnv: NettyRpcEnv) extends RpcEndpointRef(conf) {
 
   @transient var client: TransportClient = _
 
-  override def address: Option[RpcAddress] = endpointAddress.rpcAddress //Option(endpointAddress.rpcAddress) 
+  override def address: Option[RpcAddress] = endpointAddress.rpcAddress
 
   override def name: String = endpointAddress.name
 
@@ -395,7 +396,7 @@ class RequestMessage(
   override def toString: String = s"RequestMessage(${senderAddress}, ${receiver}, ${content})"
 }
 
-object RequestMessage {
+object RequestMessage extends Logging{
   
   private def readRpcAddress(in: DataInputStream): Option[RpcAddress] = {
     val hasRpcAddress = in.readBoolean()
@@ -417,13 +418,20 @@ object RequestMessage {
         case None       => throw new IllegalStateException("senderAddress must be have")
       }
       val endpointAddress = RpcEndpointAddress(readRpcAddress(in), in.readUTF())
+
+      logger.info(s"finish read action partly, endpointAddress = ${endpointAddress}")
+
       val ref = new NettyRpcEndpointRef(nettyEnv.conf, endpointAddress, nettyEnv)
       ref.client = client
       new RequestMessage(
         senderAddress,
         ref, 
-        nettyEnv.deserialize(client, bytes) // 剩下的byte是消息体
+        nettyEnv.deserialize[Any](client, bytes) // 剩下的byte是消息体
       )
+    } catch {
+      case e: Throwable =>
+        logger.error("nettyEnv.deserialize error", e)
+        throw new SparkException(e.getMessage)
     } finally {
       in.close()
     }

@@ -9,24 +9,24 @@ import org.apache.logging.log4j.scala.Logging
 import xyz.sourcecodestudy.spark.SparkException
 import xyz.sourcecodestudy.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
-private sealed trait InboxMessage
+sealed trait InboxMessage
 
-private case class OneWayMessage(senderAddress: RpcAddress, content: Any) extends InboxMessage
+case class OneWayMessage(senderAddress: RpcAddress, content: Any) extends InboxMessage
 
-private case class RpcMessage(
+case class RpcMessage(
     senderAddress: RpcAddress,
     content: Any,
     context: NettyRpcCallContext) extends InboxMessage
 
-private case object OnStart extends InboxMessage
+case object OnStart extends InboxMessage
 
-private case object OnStop extends InboxMessage
+case object OnStop extends InboxMessage
 
-private case class RemoteProcessConnected(remoteAddress: RpcAddress) extends InboxMessage
+case class RemoteProcessConnected(remoteAddress: RpcAddress) extends InboxMessage
 
-private case class RemoteProcessDisconnected(remoteAddress: RpcAddress) extends InboxMessage
+case class RemoteProcessDisconnected(remoteAddress: RpcAddress) extends InboxMessage
 
-private case class RemoteProcessConnectionError(cause: Throwable, remoteAddress: RpcAddress) extends InboxMessage
+case class RemoteProcessConnectionError(cause: Throwable, remoteAddress: RpcAddress) extends InboxMessage
 
 /**
   * 收消息
@@ -72,6 +72,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
       safelyCall(endpoint) {
         message match {
           case RpcMessage(_sender, content, context) =>
+            logger.info(s"process RpcMessage ${_sender}")
             try {
               endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message ${message} from ${_sender}")
@@ -83,11 +84,13 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             }
 
           case OneWayMessage(_sender, content) =>
+            logger.info(s"process OneWayMessage ${_sender}")
             endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
               throw new SparkException(s"Unsupported message ${message} from ${_sender}")
             })
 
           case OnStart =>
+            logger.info(s"process OnStart")
             endpoint.onStart()
             // 是线程安全的，这个endpoint对应的Inbox允许多线程同时处理
             if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
@@ -97,6 +100,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             }
 
           case OnStop =>
+            logger.info(s"process OnStop")
             val activeThreads = getNumActiveThreads
             assert(activeThreads == 1, s"There should be only a single active thread but foud ${activeThreads}.")
             dispatcher.removeRpcEndpointRef(endpoint)
@@ -104,8 +108,11 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             assert(isEmpty, "OnStop should be the last message")
 
           case RemoteProcessConnected(remoteAddress) =>
+            logger.info(s"process RemoteProcessConnected ${remoteAddress}")
           case RemoteProcessDisconnected(remoteAddress) =>
+            logger.info(s"process RemoteProcessDisconnected ${remoteAddress}")
           case RemoteProcessConnectionError(cause, remoteAddress) =>
+            logger.info(s"process RemoteProcessConnectionError ${remoteAddress}")
         }
       } // end safelyCall
 

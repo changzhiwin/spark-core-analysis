@@ -10,9 +10,9 @@ import xyz.sourcecodestudy.spark.rpc.{ThreadSafeRpcEndpoint, IsolatedRpcEndpoint
 
 sealed trait SomeInfo
 
-case class Tell(val what: String) extends SomeInfo
+case class Tell(secret: String) extends SomeInfo
 
-case class Ask(val question: String) extends SomeInfo
+case class Ask(question: String) extends SomeInfo
 
 class FoobarSafeEndpoint(override val rpcEnv: RpcEnv, val name: String) extends ThreadSafeRpcEndpoint with Logging {
 
@@ -23,7 +23,7 @@ class FoobarSafeEndpoint(override val rpcEnv: RpcEnv, val name: String) extends 
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case Tell(what) => logger.info(s"[${name}] receive what? ${what}")
+    case Tell(secret) => logger.info(s"[${name}] receive secret? ${secret}")
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -43,7 +43,7 @@ class FoobarIsoEndpoint(override val rpcEnv: RpcEnv, val name: String) extends I
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case Tell(what) => logger.info(s"[${name}] receive what? ${what}")
+    case Tell(secret) => logger.info(s"[${name}] receive secret? ${secret}")
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -63,9 +63,9 @@ class Foobar(rpcEnv: RpcEnv, isIso: Boolean) extends Logging {
 
   val endpointRef = rpcEnv.setupEndpoint("foobarTest", foobarEndpoint)
 
-  def tellSome(what: String): Unit = {
+  def tellSome(secret: String): Unit = {
     logger.info("tellSome()")
-    endpointRef.send(Tell(what))
+    endpointRef.send(Tell(secret))
   }
 
   def askSome(question: String): Unit = {

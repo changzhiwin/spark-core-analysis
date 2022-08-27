@@ -3,11 +3,11 @@ package xyz.sourcecodestudy.spark.serializer
 import java.nio.ByteBuffer
 import java.io.{OutputStream, InputStream, ObjectStreamClass}
 import java.io.{ObjectOutputStream, ObjectInputStream}
-import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
+import java.io.{ByteArrayOutputStream} //, ByteArrayInputStream}
 
 import scala.reflect.ClassTag
 
-import xyz.sourcecodestudy.spark.util.Utils
+import xyz.sourcecodestudy.spark.util.{Utils, ByteBufferInputStream}
 
 class JavaSerializer() extends Serializer {
 
@@ -26,13 +26,15 @@ class JavaSerializerInstance() extends SerializerInstance {
   }
 
   def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
+    //val bis = new ByteArrayInputStream(bytes.array())
+    val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis)
     in.readObject().asInstanceOf[T]
   }
 
   def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
+    //val bis = new ByteArrayInputStream(bytes.array())
+    val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis, loader)
     in.readObject().asInstanceOf[T]
   }

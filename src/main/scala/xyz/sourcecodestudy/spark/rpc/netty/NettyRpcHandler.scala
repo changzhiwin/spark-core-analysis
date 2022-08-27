@@ -47,11 +47,8 @@ class NettyRpcHandler(
           val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
           dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
 
-          val remoteEnvAddress = Option(remoteAddresses.get(clientAddr))
-          remoteEnvAddress match {
-            case Some(raddr) => 
-                dispatcher.postToAll(RemoteProcessConnectionError(cause, raddr))
-            case None        =>  // do nothing
+          Option(remoteAddresses.get(clientAddr)).foreach { remoteEnvAddress =>
+            dispatcher.postToAll(RemoteProcessConnectionError(cause, remoteEnvAddress))
           }
         }
         case None       => {
@@ -74,24 +71,16 @@ class NettyRpcHandler(
   }
 
   override def channelInactive(client: TransportClient): Unit = {
-     val address = Option(client.getSocketAddress().asInstanceOf[InetSocketAddress])
-     address match {
-        case Some(addr) => {
-          val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
-          nettyEnv.removeOutbox(clientAddr)
-          dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
 
-          val remoteEnvAddress = Option(remoteAddresses.get(clientAddr))
-          remoteEnvAddress match {
-            case Some(raddr) => 
-                dispatcher.postToAll(RemoteProcessDisconnected(raddr))
-            case None        =>  // do nothing
-          }          
+     Option(client.getSocketAddress().asInstanceOf[InetSocketAddress]).foreach { addr =>
+        val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
+        nettyEnv.removeOutbox(clientAddr)
+        dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
+
+        Option(remoteAddresses.get(clientAddr)).foreach { remoteEnvAddress =>
+          dispatcher.postToAll(RemoteProcessDisconnected(remoteEnvAddress))
         }
-        case None       => {
-          // do nothing
-        }
-    }   
+    }
   }
 
   private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage  = {
@@ -100,7 +89,6 @@ class NettyRpcHandler(
 
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
     val requestMessage = RequestMessage(nettyEnv, client, message)
-    assert(requestMessage.senderAddress != None)
 
     val remoteEnvAddress = requestMessage.senderAddress
     // clientAddr 表示是本次socket连接中远程的ip+port

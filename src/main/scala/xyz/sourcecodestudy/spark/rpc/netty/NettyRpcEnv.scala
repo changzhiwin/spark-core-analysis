@@ -223,8 +223,6 @@ class NettyRpcEnv(
     }
   }
 
-  // 以下都是处理网络请求的逻辑
-
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
     // 什么场景会直接send，需要探究
     if (receiver.client == null) {
@@ -255,13 +253,14 @@ class NettyRpcEnv(
     }
   }
 
+  // 以下都是处理网络逻辑
+
   private def getConfigFromSparkConf: ConfigProvider = {
     val config = conf.clone
     new ConfigProvider {
       override def get(name: String): String = config.get(name)
       override def get(name: String, defaultValue: String): String = config.get(name, defaultValue)
       override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
-        // Map[String, String]().asJava.entrySet()
         config.getAll.toMap.asJava.entrySet()
       }
     }

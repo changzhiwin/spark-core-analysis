@@ -23,7 +23,8 @@ object MainApp extends Logging {
   
     rdd2.cogroup(rdd1).foreach{ cg => println(s"k = ${cg._1}, ${cg._2._1.toSeq} | ${cg._2._2.toSeq}") }
 
-    sc.env.awaitTermination()
+    //sc.env.awaitTermination()
+    sc.stop()
 
   }
 

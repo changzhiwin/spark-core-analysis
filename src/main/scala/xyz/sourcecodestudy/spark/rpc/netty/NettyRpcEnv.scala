@@ -409,7 +409,7 @@ object RequestMessage extends Logging{
 
   def apply(nettyEnv: NettyRpcEnv, client: TransportClient, bytes: ByteBuffer): RequestMessage = {
     // byte是有状态的，如果转换成array，就不能更新数据指针了
-    val bis = new ByteBufferInputStream(bytes) //new ByteArrayInputStream(bytes.array())
+    val bis = new ByteBufferInputStream(bytes)
     val in = new DataInputStream(bis)
 
     try {

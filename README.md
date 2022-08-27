@@ -31,7 +31,8 @@ sbt test
 ## 实现的程度
 - 目前只支持单机版本
 - 完整的RDD核心逻辑（DGA、Shuffle、Aggregator）
-- rpc实现中
+- rpc模块独立运行
+- 在rpc之上，实现多个Executor，TODO
 ```
 // MainApp.scala
 def main(args: Array[String]) = {
@@ -73,6 +74,39 @@ k = cc, List(60) | List(6)
 k = aa, List(10, 30) | List(1, 3)
 k = bc, List(40, 50) | List(4, 5)
 [success] Total time: 4 s, completed 2022-8-15 23:27:14
+```
+
+## RPC独立运行
+1，获取相应的tag
+```
+git checkout v0.1.1-rpc-independent
+```
+
+2，打开第一个终端
+```
+sbt
+runMain xyz.sourcecodestudy.spark.rpc.demo.PongServer
+
+// Output
+2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive secret: Hi, I am server2.
+2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 2
+2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 1
+
+```
+3，打开第二个终端
+```
+sbt
+runMain xyz.sourcecodestudy.spark.rpc.demo.PingClient
+
+// Output
+2022-08-27 23:02:11 INFO Inbox: process OnStart
+2022-08-27 23:02:11 INFO NettyRpcEnv: [127.0.0.1:9992] send [Notify(Hi, I am server2.)], to [Some(127.0.0.1:9991)]
+2022-08-27 23:02:11 INFO RpcEndpointVerifier: [endpoint-verifier] stared
+2022-08-27 23:02:11 INFO Dispatcher: postMessage endpointName = endpoint-verifier
+2022-08-27 23:02:11 INFO Inbox: process RemoteProcessConnected 127.0.0.1:9991
+2022-08-27 23:02:11 INFO PingClient$: onComplete result = Pong(banana)
+2022-08-27 23:02:11 INFO PingClient$: Get answer: Pong(apple)
+[success] Total time: 5 s, completed 2022-8-27 23:02:11
 ```
 
 # TODOs（还有很多特性没有实现...）

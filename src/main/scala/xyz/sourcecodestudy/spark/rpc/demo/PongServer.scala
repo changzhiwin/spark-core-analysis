@@ -1,12 +1,11 @@
 package xyz.sourcecodestudy.spark.rpc.demo
 
-//import org.apache.logging.log4j.scala.Logging
+import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.SparkConf
-import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcEndpointAddress, RpcAddress}
-import xyz.sourcecodestudy.spark.rpc.netty.NettyRpcEndpointRef
+import xyz.sourcecodestudy.spark.rpc.{RpcEnv}
 
-object Server1 {
+object PongServer extends Logging {
 
   def main(args: Array[String]): Unit = {
 
@@ -16,6 +15,8 @@ object Server1 {
 
     // register endpoint, for process remote messages.
     rpcEnv.setupEndpoint("ping-pong-endpoint", endpoint)
+
+    logger.info("Pong Server running...")
 
     rpcEnv.awaitTermination()
   }

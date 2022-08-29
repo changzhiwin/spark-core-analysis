@@ -4,13 +4,11 @@ import org.apache.logging.log4j.scala.Logging
 import java.util.concurrent.ConcurrentHashMap
 import java.nio.ByteBuffer
 
-// import scala.reflect.ClassTag
-
 import xyz.sourcecodestudy.spark.{ExceptionFailure, TaskKilled} /* TaskEndReason, , */ 
 import xyz.sourcecodestudy.spark.{SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskKilledException
 import xyz.sourcecodestudy.spark.util.Utils
-import xyz.sourcecodestudy.spark.scheduler.{Task, SchedulerBackend}
+import xyz.sourcecodestudy.spark.scheduler.{Task, ExecutorBackend}
 
 class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
@@ -22,7 +20,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
-  def launchTask(backend: SchedulerBackend, taskId: Long, serializedTask: ByteBuffer): Unit = {
+  def launchTask(backend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer): Unit = {
     val tr = new TaskRunner(backend, taskId, serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
@@ -41,7 +39,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
   }
 
   // TaskRunner define
-  class TaskRunner(backend: SchedulerBackend, taskId: Long, serializedTask: ByteBuffer) extends Runnable {
+  class TaskRunner(backend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) extends Runnable {
 
     private var killed = false
     private var task: Task[Any] = _

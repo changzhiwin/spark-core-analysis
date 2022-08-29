@@ -7,6 +7,10 @@ import xyz.sourcecodestudy.spark.TaskState.TaskState  // type
 import xyz.sourcecodestudy.spark.executor.Executor
 import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer}
 
+/**
+  * Aged version, no used
+  */
+
 class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend {
 

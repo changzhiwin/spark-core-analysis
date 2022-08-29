@@ -18,7 +18,7 @@ import xyz.sourcecodestudy.spark.{SparkConf, SparkException}
 import xyz.sourcecodestudy.spark.util.{ThreadUtils, ByteBufferInputStream}
 import xyz.sourcecodestudy.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcTimeout, RpcEnvConfig, RpcEnvFactory}
-import xyz.sourcecodestudy.spark.rpc.{RpcEnv, AbortableRpcFuture, RpcAddress, RpcEndpointAddress, RpcEnvStoppedException}
+import xyz.sourcecodestudy.spark.rpc.{RpcEnv, AbortableRpcFuture, RpcAddress, RpcEndpointAddress, RpcEnvStoppedException, RpcEndpointNotFoundException}
 
 import org.apache.spark.network.client.{TransportClient, TransportClientBootstrap}
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
@@ -49,6 +49,24 @@ class NettyRpcEnv(
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     dispatcher.registerRpcEndpoint(name, endpoint)
+  }
+
+  override def asyncSetupEndpointRefByURI(uri: String): Futrue[RpcEndpointRef] = {
+    val addr = RpcEndpointAddress(uri)
+    val endpointRef = new NettyRpcEndpointRef(conf, addr, this)
+    val verifier = new NettyRpcEndpointRef(
+      conf,
+      RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME,
+      this)
+    )
+
+    verifier.ask[Boolean](RpcEndpointVerifier.CheckExistence(endpointRef.name)).flatMap { find =>
+      if (find) {
+        Future.successful(endpointRef)
+      } else {
+        Futrue.failed(new RpcEndpointNotFoundException(uri))
+      }
+    }(ThreadUtils.sameThread)
   }
 
   override def stop(endpointRef: RpcEndpointRef): Unit = {

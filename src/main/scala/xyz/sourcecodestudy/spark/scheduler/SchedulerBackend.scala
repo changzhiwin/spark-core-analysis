@@ -12,6 +12,6 @@ trait SchedulerBackend {
   def killTask(taskId: Long, interruptThread: Boolean): Unit
     //= throw new UnsupportedOperationException
 
-  // In ExecutorBackend
-  def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit
+  // In ExecutorBackend, move to executor
+  // def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit
 }

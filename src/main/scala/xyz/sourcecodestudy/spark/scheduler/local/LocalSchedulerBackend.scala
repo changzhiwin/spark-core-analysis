@@ -6,7 +6,7 @@ import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{SparkEnv, TaskState} // object
 import xyz.sourcecodestudy.spark.TaskState.TaskState   // type
-import xyz.sourcecodestudy.spark.executor.Executor
+import xyz.sourcecodestudy.spark.executor.{Executor, ExecutorBackend}
 import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer}
 import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcEndpointRef, ThreadSafeRpcEndpoint, RpcCallContext}
 
@@ -65,7 +65,7 @@ class LocalEndpoint(
 class LocalSchedulerBackend(
     //conf: SparkConf,
     scheduler: TaskSchedulerImpl,
-    val totalCores: Int) extends SchedulerBackend {
+    val totalCores: Int) extends SchedulerBackend with ExecutorBackend {
 
   private var localEndpointRef: RpcEndpointRef = null
 

@@ -48,6 +48,15 @@ object Utils extends Logging {
     }
   }
 
+  def tryLogNonFatalError(block: => Unit): Unit = {
+    try {
+      block
+    } catch {
+      case NonFatal(e) =>
+        logger.error(s"Uncaught exeception in thread ${Thread.currentThread().getName}", t)
+    }
+  }
+
   // ClosureCleaner用到下面的方法，非核心逻辑，暂不关注
   /**
    * Preferred alternative to Class.forName(className), as well as

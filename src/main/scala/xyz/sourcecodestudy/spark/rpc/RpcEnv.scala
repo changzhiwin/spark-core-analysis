@@ -1,5 +1,7 @@
 package xyz.sourcecodestudy.spark.rpc
 
+import scala.concurrent.Future
+
 import xyz.sourcecodestudy.spark.SparkConf
 import xyz.sourcecodestudy.spark.rpc.netty.{NettyRpcEnvFactory}
 
@@ -29,6 +31,8 @@ abstract class RpcEnv(conf: SparkConf) {
   def address: RpcAddress
 
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
+
+  def asyncSetupEndpointRefByURI(uri: String): Futrue[RpcEndpointRef]
 
   def stop(endpint: RpcEndpointRef): Unit
 

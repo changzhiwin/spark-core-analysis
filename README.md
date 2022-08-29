@@ -25,9 +25,11 @@ sbt test
 
 # 当前提供的输出
 
-## 整理的概念图
+## RDD的运行逻辑
 ![rdd-running-logic](./doc/img/rdd-running-logic.png)
 
+## RPC实现的逻辑
+![rpc-framework](./doc/img/rpc-framework.png)
 ## 实现的程度
 - 目前只支持单机版本
 - 完整的RDD核心逻辑（DGA、Shuffle、Aggregator）
@@ -88,7 +90,7 @@ sbt
 runMain xyz.sourcecodestudy.spark.rpc.demo.PongServer
 
 // Output
-2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive secret: Hi, I am server2.
+2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive secret: Hi, I am PingClient.
 2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 2
 2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 1
 
@@ -100,7 +102,7 @@ runMain xyz.sourcecodestudy.spark.rpc.demo.PingClient
 
 // Output
 2022-08-27 23:02:11 INFO Inbox: process OnStart
-2022-08-27 23:02:11 INFO NettyRpcEnv: [127.0.0.1:9992] send [Notify(Hi, I am server2.)], to [Some(127.0.0.1:9991)]
+2022-08-27 23:02:11 INFO NettyRpcEnv: [127.0.0.1:9992] send [Notify(Hi, I am PingClient.)], to [Some(127.0.0.1:9991)]
 2022-08-27 23:02:11 INFO RpcEndpointVerifier: [endpoint-verifier] stared
 2022-08-27 23:02:11 INFO Dispatcher: postMessage endpointName = endpoint-verifier
 2022-08-27 23:02:11 INFO Inbox: process RemoteProcessConnected 127.0.0.1:9991

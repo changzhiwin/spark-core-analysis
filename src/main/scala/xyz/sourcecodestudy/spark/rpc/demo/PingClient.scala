@@ -22,7 +22,7 @@ object PingClient extends Logging {
       rpcEnv.asInstanceOf[NettyRpcEnv])
 
     // 1, send
-    endpointRef.send(Notify("Hi, I am server2."))
+    endpointRef.send(Notify("Hi, I am PingClient."))
 
     // 2, ask async
     endpointRef.ask[Pong](Ping(2)).onComplete {

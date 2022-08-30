@@ -1,16 +1,30 @@
 package xyz.sourcecodestudy.spark.scheduler.cluster
 
-import xyz.sourcecodestudy.spark.util.ThreadUtils
 import java.util.concurrent.TimeUnit
+
+import scala.collection.mutable.{HashMap}
+//import scala.concurrent.Future
+
+import org.apache.logging.log4j.scala.Logging
+
+import xyz.sourcecodestudy.spark.{TaskState, SparkException} //
+import xyz.sourcecodestudy.spark.rpc.{RpcAddress, RpcEnv, IsolatedRpcEndpoint, RpcCallContext}
+//import xyz.sourcecodestudy.spark.TaskState.TaskState
+import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer, TaskDescription}
+import xyz.sourcecodestudy.spark.util.{ThreadUtils, Utils}
 
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv) 
     extends SchedulerBackend with Logging {
+
+  import CoarseGrainedClusterMessage._
+
+  protected val conf = scheduler.sc.conf
+
+  protected var currentExecutorIdCounter = 0
   
   private val executorDataMap = new HashMap[String, ExecutorData]
 
-  //private val executorPendingLossReason = new HashSet[String]
-
-  private val reviveThread = ThreadUtils.newDaemonSingleThreadScheduledExecutro("driver-revive-thread")
+  private val reviveThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
@@ -21,6 +35,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     override def onStart(): Unit = {
       val reviveIntervalMs = 1000L // get conf TODO
 
+      // 定时触发 ReviveOffers 任务
       reviveThread.scheduleAtFixedRate(
         () => Utils.tryLogNonFatalError {
           Option(self).foreach(_.send(ReviveOffers))
@@ -32,63 +47,141 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case StatusUpdate(taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data.value)
+      case StatusUpdate(executorId, taskId, state, data) =>
+        scheduler.statusUpdate(taskId, state, data)
         if (TaskState.isFinished(state)) {
-
+          executorDataMap.get(executorId) match {
+            case Some(executorInfo) =>
+              executorInfo.freeCores += 1 // default taskCpus = 1
+              makeOffers(executorId)
+            case None =>
+              logger.warn(s"Ignored task status update (${taskId} state ${state}) for unknow executorId(${executorId})")
+          }
         }
+
       case ReviveOffers =>
         makeOffers()
-      case KillTask(taskId, interruptThread) =>
-        //
-      //case KillExecutorOnHost(host) =>
-        //
-      //case RemoveExecutor()
-        //
+
+      case KillTask(taskId, executorId, interruptThread) =>
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorEndpoint.send(
+              KillTask(taskId, executorId, interruptThread)
+            )
+          case None => {
+            logger.warn(s"Attempted to kill task(${taskId}) for unknow executorId(${executorId})")
+          }
+        }
+
       case LaunchedExecutor(executorId) =>
+        executorDataMap.get(executorId).foreach { info =>
+          info.freeCores = info.totalCores
+        }
         makeOffers(executorId)
+
       case e =>
         logger.error(s"Received unexpected message. ${e}")
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterExecutor(executorId, hostname, cores) =>
+      case RegisterExecutor(executorId, executorRef, hostname, cores) =>
         if (executorDataMap.contains(executorId)) {
-
+          context.sendFailure(new IllegalStateException(s"Duplicate executor ID: ${executorId}"))
         } else {
+          val executorAddress = executorRef.address match {
+            case Some(refAddr) => refAddr
+            case None      => context.senderAddress
+          }
 
+          logger.info(s"Registered executor ${executorRef} ($executorAddress) with ID ${executorId}")
+
+          addressToExecutorId(executorAddress) = executorId
+
+          val data = new ExecutorData(executorRef, executorAddress, hostname, 0, cores, registrationTs = System.currentTimeMillis())
+
+          CoarseGrainedSchedulerBackend.this.synchronized {
+            executorDataMap.put(executorId, data)
+            if (currentExecutorIdCounter < executorId.toInt) {
+              currentExecutorIdCounter = executorId.toInt
+            }
+          }
+
+          context.reply(true)
         }
 
-      case StopExecutor =>
-        //
-      case IsExecutorAlive(executorId) =>
-        context.reply(isExecutorActive(executorId))
+      case StopDriver =>
+        context.reply(true)
+        logger.warn(s"Received ask: StopDriver")
 
       case e => 
         logger.error(s"Received unexpected ask ${e}")
     }
 
-    private def makeOffers(): Unit = {
+    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+      addressToExecutorId.get(remoteAddress).foreach { executorId =>
+        removeExecutor(executorId)
+      }
+    }
 
+    private def makeOffers(): Unit = {
+      val taskDescs = withLock {
+        val activeExecutors = executorDataMap
+
+        val workOffers = activeExecutors.map {
+          case (id, executorData) =>
+            new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        }.toIndexedSeq
+
+        scheduler.resourceOffers(workOffers/*, true*/)
+      }
+
+      if (taskDescs.nonEmpty) {
+        launchTasks(taskDescs)
+      }
     }
 
     private def makeOffers(executorId: String): Unit = {
+      val taskDescs = withLock {
+        if (executorDataMap.contains(executorId)) {
+          val executorData = executorDataMap(executorId)
+          val workOffers = IndexedSeq(
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores)
+          )
 
-    }
+          scheduler.resourceOffers(workOffers)
+        } else {
+          Seq.empty
+        }
+      }
 
-    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-
+      if (taskDescs.nonEmpty) {
+        launchTasks(taskDescs)
+      }
     }
 
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
-      for (task <- tasks.flatten) {
-
+      for (task <- tasks.flatten) {        
+        // ignore rpc message size
+        val executorData = executorDataMap(task.executorId)
+        executorData.freeCores -= 1
+        
+        executorData.executorEndpoint.send(LaunchTask(task.taskId, task.serializedTask))
       }
     }
 
     private def removeExecutor(executorId: String): Unit = {
-
+      logger.info(s"Asked to remove executor ${executorId}.")
+      executorDataMap.get(executorId) match {
+        case Some(executorInfo) =>
+          CoarseGrainedSchedulerBackend.this.synchronized {
+            addressToExecutorId -= executorInfo.executorAddress
+            executorDataMap -= executorId
+          }
+        case None =>
+          logger.warn(s"Asked to remove no-existent executor ${executorId}")
+      }
     }
+
   } // end class DriverEndpoint
 
   val driverEndpoint = rpcEnv.setupEndpoint(
@@ -99,15 +192,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
 
   override def start(): Unit = {
-
+    logger.info("Start CoarseGrainedSchedulerBackend.")
   }
 
   override def stop(): Unit = {
-
+    reviveThread.shutdownNow()
+    try {
+      Option(driverEndpoint).foreach { ref =>
+        ref.askSync[Boolean](StopDriver)
+      }
+    } catch {
+      case e: Throwable =>
+        throw new SparkException("Stop CoarseGrainedSchedulerBackend failed.", e)
+    }
   }
 
   override def reviveOffers(): Unit = Utils.tryLogNonFatalError {
-    driverEndpoint.end(ReviveOffers)
+    driverEndpoint.send(ReviveOffers)
   }
 
   override def killTask(
@@ -116,10 +217,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     interruptThread: Boolean,
     reason: String
   ): Unit = {
-    driverEndpoint.send(KilTask(taskId, executorId, interruptThread))
+    driverEndpoint.send(KillTask(taskId, executorId, interruptThread))
   }
 
-  override def defaultParallelism(): Int = 2
+  override def defaultParallelism(): Int = {
+    //conf.get("spark.default.parallelism", 2)
+    2
+  }
+
+  private def withLock[T](fn: => T): T = scheduler.synchronized {
+    CoarseGrainedSchedulerBackend.this.synchronized { fn }
+  }
 }
 
 object CoarseGrainedSchedulerBackend {

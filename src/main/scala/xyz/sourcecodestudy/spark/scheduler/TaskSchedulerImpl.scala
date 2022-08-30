@@ -77,7 +77,8 @@ class TaskSchedulerImpl(
     
     activeTaskSets.find(_._2.stageId == stageId).foreach {
       case (_, tsm) => {
-        tsm.runningTaskSet.foreach { taskId => backend.killTask(taskId, interruptThread) }
+        // TODO, need to record executorId, here hack to 1
+        tsm.runningTaskSet.foreach { taskId => backend.killTask(taskId, "1", interruptThread, "add reason") }
 
         val message = s"stage(${stageId}) was cancelled"
         tsm.abort(message)

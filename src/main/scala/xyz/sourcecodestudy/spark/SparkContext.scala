@@ -131,7 +131,7 @@ object SparkContext extends Logging {
         def localCpuCount = Runtime.getRuntime.availableProcessors()
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalSchedulerBackend(scheduler, 1) // new LocalBackend(scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(scheduler, threadCount) // new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
       //case SPARK_REGEX(sparkUrl) =>

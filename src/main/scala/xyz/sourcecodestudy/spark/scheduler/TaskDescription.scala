@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 
 class TaskDescription(
     val taskId: Long,
-    executorId: String,
+    val executorId: String,
     val name: String,
     val index: Int,
     _serializedTask: ByteBuffer) extends Serializable {

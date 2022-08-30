@@ -6,13 +6,14 @@ import xyz.sourcecodestudy.spark.TaskState            // object
 import xyz.sourcecodestudy.spark.TaskState.TaskState  // type
 import xyz.sourcecodestudy.spark.executor.Executor
 import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer}
+import xyz.sourcecodestudy.spark.executor.ExecutorBackend
 
 /**
   * Aged version, no used
   */
 
 class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
-  extends SchedulerBackend {
+  extends SchedulerBackend with ExecutorBackend {
 
   private var freeCores = totalCores
   private val localExecutorId = "localhost-id"
@@ -37,7 +38,7 @@ class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
 
   override def defaultParallelism(): Int = totalCores
 
-  override def killTask(taskId: Long, interruptThread: Boolean): Unit = {
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     executor.killTask(taskId, interruptThread)
   }
 

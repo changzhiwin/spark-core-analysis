@@ -3,11 +3,13 @@ package xyz.sourcecodestudy.spark.util
 import java.util.concurrent.{ThreadFactory, ThreadPoolExecutor, Executors, ExecutorService}
 import java.util.concurrent.{TimeUnit, LinkedBlockingDeque, AbstractExecutorService, RejectedExecutionException}
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.ScheduledExecutorService
 
-import scala.util.control.NonFatal
+//import scala.util.control.NonFatal
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import java.util.concurrent.ScheduledThreadPoolExecutor
 
 object ThreadUtils {
 
@@ -119,6 +121,13 @@ object ThreadUtils {
   def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
     Executors.newSingleThreadExecutor(threadFactory)
+  }
+
+  def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
+    val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    executor.setRemoveOnCancelPolicy(true)
+    executor
   }
 
 }

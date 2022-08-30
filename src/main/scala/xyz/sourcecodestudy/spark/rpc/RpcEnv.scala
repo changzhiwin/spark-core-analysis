@@ -32,7 +32,7 @@ abstract class RpcEnv(conf: SparkConf) {
 
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
-  def asyncSetupEndpointRefByURI(uri: String): Futrue[RpcEndpointRef]
+  def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef]
 
   def stop(endpint: RpcEndpointRef): Unit
 

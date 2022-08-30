@@ -1,22 +1,25 @@
 package xyz.sourcecodestudy.spark.executor
 
-import org.apache.logging.log4j.scala.Logging
-import java.util.concurrent.ConcurrentHashMap
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
-import xyz.sourcecodestudy.spark.{SparkEnv, SparkConf}
-import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcEndpointRef}
-import xyz.sourcecodestudy.spark.TaskState.TaskState
+import scala.util.control.NonFatal
+import scala.util.{Success, Failure}
+
+import org.apache.logging.log4j.scala.Logging
+
+import xyz.sourcecodestudy.spark.{SparkEnv, SparkConf, TaskState}
+import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcAddress, RpcEndpointRef, IsolatedRpcEndpoint, RpcCallContext}
+import xyz.sourcecodestudy.spark.TaskState._
 import xyz.sourcecodestudy.spark.util.ThreadUtils
-import scala.util.control.NonFatal.apply
+import xyz.sourcecodestudy.spark.scheduler.cluster.CoarseGrainedClusterMessage._
 
 class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
-    //executorId: String,
-    //host: String,
-    //port: Int,
+    executorId: String,
+    hostname: String,
+    cores: Int,
     env: SparkEnv) extends IsolatedRpcEndpoint with ExecutorBackend with Logging {
 
   val stopping = new AtomicBoolean(false)
@@ -27,17 +30,14 @@ class CoarseGrainedExecutorBackend(
 
   override def onStart(): Unit = {
     // get driverEndpontRef
-    rpcEnv.asyncSetupEndpointRefByURI(driverUrl).falatMap { ref =>
+    rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       driver = Some(ref)
-      ref.ask[Boolean](
-        //TODO
-        RegisterExecutor(???)
-      )
+      ref.ask[Boolean]( RegisterExecutor(executorId, self, hostname, cores) )
     }(ThreadUtils.sameThread).onComplete {
       case Success(_) =>
         self.send(RegisteredExecutor)
       case Failure(e) =>
-        // exit TODO
+        exitExecutor(1, s"Cannot register with deriver: ${driverUrl}", e)
     }(ThreadUtils.sameThread)
   }
 
@@ -45,19 +45,19 @@ class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logger.info("Successfully registered with driver")
       try {
-
+        executor = Some(new Executor(executorId, false))
+        driver.get.send(LaunchedExecutor(executorId))
       } catch {
         case NonFatal(e) =>
-          //exit TODO
+          exitExecutor(1, s"Unable to create executor due to ${e.getMessage()}", e)
       }
 
-    case LaunchTask(data) =>
+    case LaunchTask(taskId, data) =>
       assert(executor != None, "Received LaunchTask but no executor")
-      val taskDesc = TaskDescription.
-      executor.launchTask(this,taskDesc.taskId, )
+      executor.get.launchTask(this, taskId, data)
 
-    case KillTask(taskId, _, interruptThread, reason) =>
-      executor.killTask(taskId, interruptThread)
+    case KillTask(taskId, _, interruptThread) =>
+      executor.get.killTask(taskId, interruptThread)
 
     case StopExecutor =>
       stopping.set(true)
@@ -77,24 +77,45 @@ class CoarseGrainedExecutorBackend(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-
+    case e => logger.warn(s"Unexpected message to receiveAndReply, ${e}")
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
-      logger.info(s"")
-    } else if (driver.exits(_.address.get == remoteAddress)) {
-      // exit
+      logger.info(s"Driver from ${remoteAddress} disconnected during shutdown")
+    } else if (driver.exists(_.address.get == remoteAddress)) {
+      exitExecutor(1, s"Driver ${remoteAddress} disassociated! Shutting down.", null)
     } else {
-      logger.warn(s"")
+      logger.warn(s"An unknow (${remoteAddress}) driver address")
     }
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val msg = StatusUpdate()
+    val msg = StatusUpdate(executorId, taskId, state, data)
+
+    if (TaskState.isFinished(state)) {
+      // Can do somethig
+    }
+
     driver match {
       case Some(ref) => ref.send(msg)
       case None      => logger.warn(s"")
+    }
+  }
+
+  protected def exitExecutor(code: Int, reason: String, throwable: Throwable = null): Unit = {
+    if (stopping.compareAndSet(false, true)) {
+      val message = s"Executor self-exiting due to ${reason}"
+      Option(throwable) match {
+        case Some(_) => logger.error(message, throwable)
+        case None => {
+          logger.warn(s"Code(${code}), ${message}")
+        }
+      }
+
+      self.send(ShutDown)
+    } else {
+      logger.info("Skip exiting executor, already asked to exit")
     }
   }
 }
@@ -105,36 +126,39 @@ object CoarseGrainedExecutorBackend {
 
   case class Arguments(
       driverUrl: String,
-      //executorId: String,
-      host: String,
+      executorId: String,
+      hostname: String,
       port: Int,
-      cores: Int,
-      appId: String,
-      workerUrl: Option[String])
+      cores: Int)
 
   def main(args: Array[String]): Unit = {
 
     val arguments = parseArguments(args)
 
     val driverConf = new SparkConf()
-    driverConf.set("port", argarguments.port.toString)
+    driverConf.set("port", arguments.port.toString)
 
-    val env = SparkEnv.create(driverConf, false, false) //createExecutorEnv()
+    val env = SparkEnv.create(driverConf, false, false)
 
-    val backend = new CoarseGrainedExecutorBackend(env.rpcEnv, arguments.driverUrl, env)
+    val backend = new CoarseGrainedExecutorBackend(
+        env.rpcEnv, 
+        arguments.driverUrl, 
+        arguments.executorId,
+        arguments.hostname,
+        arguments.cores, 
+        env)
 
     env.rpcEnv.setupEndpoint("Executor", backend)
 
     env.rpcEnv.awaitTermination()
   }
 
-  private parseArguments(args: Array[String]): Arguments = {
-    var driverUrl: String = null
-    var host: String = null
-    var port: Int = 0
-    var appId: String = null
-    var cores: Int = 0
-    var workerUrl: Option[String] = None
+  private def parseArguments(args: Array[String]): Arguments = {
+    var driverUrl: String = "spark://CoarseGrainedScheduler@127.0.0.1:9990"  // driver nettyRpcEnv use
+    var executorId: String = "1"
+    var hostname: String = "spark://127.0.0.1:9995"  // executor nettyRpcEnv use
+    var port: Int = 9995
+    var cores: Int = 2
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -142,20 +166,17 @@ object CoarseGrainedExecutorBackend {
         case ("--driver-url") :: value :: tail =>
           driverUrl = value
           argv = tail
-        case ("--host") :: value :: tail =>
-          host = value
+        case ("--executor-id") :: value :: tail =>
+          executorId = value
+          argv = tail
+        case ("--hostname") :: value :: tail =>
+          hostname = value
           argv = tail
         case ("--port") :: value :: tail =>
           port = value.toInt
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt
-          argv = tail
-        case ("--app-id") :: value :: tail =>
-          appId = value
-          argv = tail
-        case ("--worker-url") :: value :: tail =>
-          workerUrl = Some(value)
           argv = tail
         case Nil =>
         case tail =>
@@ -164,6 +185,6 @@ object CoarseGrainedExecutorBackend {
       }
     }
 
-    Arguments(driverUrl, host, port, cores, appId, workerUrl)
+    Arguments(driverUrl, executorId, hostname, port, cores)
   }
 }

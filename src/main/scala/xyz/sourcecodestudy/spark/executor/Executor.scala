@@ -8,7 +8,8 @@ import xyz.sourcecodestudy.spark.{ExceptionFailure, TaskKilled} /* TaskEndReason
 import xyz.sourcecodestudy.spark.{SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskKilledException
 import xyz.sourcecodestudy.spark.util.Utils
-import xyz.sourcecodestudy.spark.scheduler.{Task, ExecutorBackend}
+import xyz.sourcecodestudy.spark.scheduler.{Task}
+import xyz.sourcecodestudy.spark.executor.ExecutorBackend
 
 class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 

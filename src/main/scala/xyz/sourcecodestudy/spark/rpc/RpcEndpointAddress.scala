@@ -1,5 +1,7 @@
 package xyz.sourcecodestudy.spark.rpc
 
+import xyz.sourcecodestudy.spark.SparkException
+
 case class RpcEndpointAddress(rpcAddress: Option[RpcAddress], name: String) {
   require(name != null, "RpcEndpoint name must be provided")
 
@@ -28,7 +30,7 @@ object RpcEndpointAddress {
       if (uri.getScheme() != "spark" || host == null || port < 0 || name == null) {
         throw new SparkException(s"Invalid Spark URL: ${sparkUrl}")
       }
-      new RpcEndpointAddress(host, poport, name)
+      new RpcEndpointAddress(host, port, name)
     } catch {
       case e: java.net.URISyntaxException =>
         throw new SparkException(s"Invalid Spark URL: ${sparkUrl}", e)

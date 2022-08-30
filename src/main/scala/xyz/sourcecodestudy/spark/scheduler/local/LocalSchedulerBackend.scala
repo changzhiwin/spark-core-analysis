@@ -83,7 +83,7 @@ class LocalSchedulerBackend(
     localEndpointRef.send(ReviveOffers)
   }
 
-  override def killTask(taskId: Long, interruptThread: Boolean): Unit = {
+  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     localEndpointRef.send(KillTask(taskId, interruptThread, "Be Killed"))
   }
 

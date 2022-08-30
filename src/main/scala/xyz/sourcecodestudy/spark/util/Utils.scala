@@ -53,7 +53,7 @@ object Utils extends Logging {
       block
     } catch {
       case NonFatal(e) =>
-        logger.error(s"Uncaught exeception in thread ${Thread.currentThread().getName}", t)
+        logger.error(s"Uncaught exeception in thread ${Thread.currentThread().getName}", e)
     }
   }
 

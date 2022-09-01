@@ -2,10 +2,8 @@ package xyz.sourcecodestudy.spark.util
 
 import java.io._
 import java.nio.channels.{FileChannel, WritableByteChannel}
-import java.util.concurrent.{Executors, ThreadPoolExecutor}
 
 import org.apache.logging.log4j.scala.Logging
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import scala.util.control.NonFatal
 
 object Utils extends Logging {
@@ -22,19 +20,6 @@ object Utils extends Logging {
   def nonNegativeMod(x: Int, mod: Int): Int = {
     val rawMod = x % mod
     rawMod + (if (rawMod < 0) mod else 0)
-  }
-
-  private val daemonThreadFactoryBuilder: ThreadFactoryBuilder =
-    new ThreadFactoryBuilder().setDaemon(true)
-
-  def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
-    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
-  }
-
-  def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
-    val threadFactory = daemonThreadFactoryBuilder.setNameFormat(prefix + "-%d").build()
-    Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   def tryOrIOException[T](block: => T): T = {

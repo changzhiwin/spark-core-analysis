@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 import xyz.sourcecodestudy.spark.{ExceptionFailure, TaskKilled} /* TaskEndReason, , */ 
 import xyz.sourcecodestudy.spark.{SparkEnv, TaskState}
 import xyz.sourcecodestudy.spark.TaskKilledException
-import xyz.sourcecodestudy.spark.util.Utils
+import xyz.sourcecodestudy.spark.util.{Utils, ThreadUtils}
 import xyz.sourcecodestudy.spark.scheduler.{Task}
 import xyz.sourcecodestudy.spark.executor.ExecutorBackend
 
@@ -17,7 +17,7 @@ class Executor(executorId: String, isLocal: Boolean = false) extends Logging {
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
-  private val threadPool = Utils.newDaemonCachedThreadPool("Executor task lauch worker")
+  private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task lauch worker") // Utils.newDaemonCachedThreadPool("Executor task lauch worker")
 
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 

@@ -1,6 +1,6 @@
 package xyz.sourcecodestudy.spark.scheduler.cluster
 
-import java.util.concurrent.TimeUnit
+//import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{HashMap}
 
@@ -32,6 +32,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onStart(): Unit = {
       // 定时触发 ReviveOffers 任务
+      // 可以不启用，因为并发小，而且其他事件也可以触发，如LaunchedExecutor
       /*
       val reviveIntervalMs = 30000L // get conf TODO
       reviveThread.scheduleAtFixedRate(
@@ -40,7 +41,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         },
         0,
         reviveIntervalMs,
-        TimeUnit.MILLISECONDS
+        java.util.concurrent.TimeUnit.MILLISECONDS
       )
       */
     }
@@ -152,7 +153,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private def makeOffers(executorId: String): Unit = {
-      logger.info(s"makeOffers executorId =${executorId}")
 
       val taskDescs = withLock {
         if (executorDataMap.contains(executorId)) {
@@ -160,7 +160,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val workOffers = IndexedSeq(
             new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores)
           )
-
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -174,8 +173,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
       for (task <- tasks.flatten) {   
-
-        logger.info(s"launchTasks executorId = ${task.executorId}, taskId = ${task.taskId}")     
+        logger.info(s"launchTasks executorId = ${task.executorId}, taskId = ${task.taskId}")  
         // ignore rpc message size
         val executorData = executorDataMap(task.executorId)
         executorData.freeCores -= 1
@@ -185,7 +183,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private def removeExecutor(executorId: String): Unit = {
-      logger.info(s"Asked to remove executor ${executorId}.")
+
+      logger.warn(s"Asked to remove executor ${executorId}.")
+
       executorDataMap.get(executorId) match {
         case Some(executorInfo) =>
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -236,8 +236,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def defaultParallelism(): Int = {
-    //conf.get("spark.default.parallelism", 2)
-    2
+    conf.get("spark.default.parallelism", "2").toInt
   }
 
   private def withLock[T](fn: => T): T = scheduler.synchronized {

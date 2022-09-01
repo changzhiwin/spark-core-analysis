@@ -85,14 +85,13 @@ class NettyRpcEnv(
   }
 
   def send(message: RequestMessage): Unit = {
-
-    logger.info(s"-- [${message.senderAddress}] -> send [${message.content}], to [${message.receiver.address}], ${address}")
-
-    val remoteAddr = message.receiver.address
-
-    remoteAddr match {
+    message.receiver.address match {
       case Some(addr) => {
-        if (addr == address) {
+
+        val isLocal = (addr == address)
+        logger.info(s"[${message.senderAddress}] -> [${addr}], send [${if (isLocal) "local" else "remote"}] message [${message.content}]")
+        
+        if (isLocal) {
           try {
             dispatcher.postOneWayMessage(message)
           } catch {
@@ -108,10 +107,6 @@ class NettyRpcEnv(
   }
 
   def askAbortable[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): AbortableRpcFuture[T] = {
-
-    logger.info(s"-- [${message.senderAddress}] -> ask [${message.content}], to [${message.receiver.address}], ${address}")
-
-    val remoteAddr = message.receiver.address
     val promise = Promise[Any]()
     var rpcMsg: Option[RpcOutboxMessage] = None
 
@@ -140,10 +135,13 @@ class NettyRpcEnv(
     }
 
     try {
-      remoteAddr match {
+      message.receiver.address match {
         case Some(addr) => {
-          // 本地通信，ip、port都相同
-          if (addr == address) {
+
+          val isLocal = (addr == address)
+          logger.info(s"[${message.senderAddress}] -> [${addr}], ask [${if (isLocal) "local" else "remote"}] message [${message.content}]")
+
+          if (isLocal) {
             val p = Promise[Any]()
             p.future.onComplete {
               case Success(response) => onSuccess(response)
@@ -252,7 +250,6 @@ class NettyRpcEnv(
   }
 
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
-    logger.info(s"postToOutbox, receiver = ${receiver}")
     // 什么场景会直接send，需要探究
     if (receiver.client != null) {
       message.sendWith(receiver.client)

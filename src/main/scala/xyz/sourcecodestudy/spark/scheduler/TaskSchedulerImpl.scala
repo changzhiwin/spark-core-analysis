@@ -73,18 +73,20 @@ class TaskSchedulerImpl(
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
-    logger.warn(s"Cancelling stage(${stageId})")
 
-    System.exit(-1)
+    logger.warn(s"Cancelling stage(${stageId})")
     
     activeTaskSets.find(_._2.stageId == stageId).foreach {
       case (_, tsm) => {
-        // TODO, need to record executorId, here hack to 1
-        tsm.runningTaskSet.foreach { taskId => backend.killTask(taskId, "1", interruptThread, "add reason") }
-
+        // Question: how to get executorId?
+        // Answer: from tsm.taskInfos(taskId)
+        tsm.runningTaskSet.foreach { taskId => 
+          val taskInfo = tsm.taskInfos(taskId)
+          backend.killTask(taskId, taskInfo.execId, interruptThread, "add reason") 
+        }
         val message = s"stage(${stageId}) was cancelled"
         tsm.abort(message)
-        logger.info(message)
+        logger.warn(message)
       }
     }
   }

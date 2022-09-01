@@ -14,6 +14,9 @@ import xyz.sourcecodestudy.spark.TaskState._
 import xyz.sourcecodestudy.spark.util.{ThreadUtils, SerializableBuffer}
 import xyz.sourcecodestudy.spark.scheduler.cluster.CoarseGrainedClusterMessage._
 
+// How to run
+// >sbt
+// >runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 17 --hostname spark://127.0.0.1:9997 --port 9997
 class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
@@ -62,17 +65,20 @@ class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       stopping.set(true)
-      logger.info("Driver commanded a shutdown")
       self.send(ShutDown)
 
     case ShutDown =>
+      logger.info("Shutdown right now.")
       stopping.set(true)
       new Thread("CoarseGrainedExecutorBackend-stop-executor") {
         override def run(): Unit = {
+
           executor match {
             case Some(exe) => exe.stop()
             case None      => System.exit(1)
           }
+          
+          env.stop()
         }
       }
   }
@@ -113,7 +119,6 @@ class CoarseGrainedExecutorBackend(
           logger.warn(s"Code(${code}), ${message}")
         }
       }
-
       self.send(ShutDown)
     } else {
       logger.info("Skip exiting executor, already asked to exit")
@@ -152,8 +157,8 @@ object CoarseGrainedExecutorBackend {
 
     val arguments = parseArguments(args)
 
-    val driverConf = new SparkConf()
-    driverConf.set("port", arguments.port.toString)
+    val driverConf = new SparkConf(false)
+    driverConf.set("spark.rpc.netty-port", arguments.port.toString)
 
     val env = SparkEnv.create(driverConf, false, false)
     SparkEnv.set(env)
@@ -169,7 +174,7 @@ object CoarseGrainedExecutorBackend {
     env.mapOutputTracker.asInstanceOf[MapOutputTrackerExecutor].setBackend(backend)
     env.rpcEnv.setupEndpoint("Executor", backend)
 
-    env.rpcEnv.awaitTermination()
+    // env.rpcEnv.awaitTermination()
   }
 
   private def parseArguments(args: Array[String]): Arguments = {

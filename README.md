@@ -13,10 +13,18 @@
 - Java 1.8
 - Scala 2.13.8
 ```
-// master is developing
-git checkout v0.1.0-local-sync
-sbt run
-sbt test
+git checkout v0.1.2-cluster-support
+
+// open terminal 1, run driver process and wait
+>sbt run
+
+// open terminal 2, run executor process 1
+>sbt
+>runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
+
+// open terminal 3, run executor process 2
+>sbt
+>runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
 ```
 
 ## 有什么用
@@ -31,17 +39,18 @@ sbt test
 ## RPC实现的逻辑
 ![rpc-framework](./doc/img/rpc-framework.png)
 ## 实现的程度
-- 目前只支持单机版本
+- 目前单机单进程、单机多进程（1 Driver + n Executor）模式运行
 - 完整的RDD核心逻辑（DGA、Shuffle、Aggregator）
 - rpc模块独立运行
-- 在rpc之上，实现多个Executor，TODO
+- cluster模式采用多进程模拟
 ```
 // MainApp.scala
 def main(args: Array[String]) = {
 
-  val sc = new SparkContext()
-  logger.info(s"Enter application, master = ${sc.master}")
+  val sc = new SparkContext(new SparkConf(false).setAll(parseArguments(args)))
 
+  logger.warn(s"Enter application, driver = ${sc.master}")
+  
   val rdd0 = sc.parallelize(Seq("a", "aa", "aaa", "aaaa", "aaa", "aaa", "aa", "aaaa", "aaaa", "aaaa"), 3)
 
   rdd0.map(k => (k, 1.toLong)).count().foreach(p => println(s"count ${p._1} -> ${p._2}")) 
@@ -53,29 +62,40 @@ def main(args: Array[String]) = {
   val rdd2 = sc.parallelize(Seq("aa" -> 10, "bb" -> 20, "aa" -> 30, "bc" -> 40, "bc" -> 50, "cc" -> 60, "ac" -> 70, "ac" -> 80, "ab" -> 90), 2)
 
   rdd2.cogroup(rdd1).foreach{ cg => println(s"k = ${cg._1}, ${cg._2._1.toSeq} | ${cg._2._2.toSeq}") }
-
+  
   sc.stop()
 }
 
-// Output
+// Driver Output
 [info] running xyz.sourcecodestudy.spark.MainApp 
-count aaa -> 3
+2022-09-01 18:16:57 WARN MainApp$: Enter application, driver = spark://*
+[success] Total time: 73 s (01:13), completed 2022-9-1 18:16:58
+
+// Executor 1 Output
+[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
+[success] Total time: 13 s, completed 2022-9-1 18:16:11
 count aaaa -> 4
 count a -> 1
-count aa -> 2
-group bb -> List(2)
-group aa -> List(1, 3)
-group ab -> List(9)
-group cc -> List(6)
-group bc -> List(4, 5)
-group ac -> List(7, 8)
-k = bb, List(20) | List(2)
-k = ac, List(70, 80) | List(7, 8)
-k = ab, List(90) | List(9)
-k = cc, List(60) | List(6)
+count aaa -> 3
 k = aa, List(10, 30) | List(1, 3)
 k = bc, List(40, 50) | List(4, 5)
-[success] Total time: 4 s, completed 2022-8-15 23:27:14
+2022-09-01 18:16:58 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
+
+// Executor 2 Output
+[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
+[success] Total time: 11 s, completed 2022-9-1 18:16:12
+count aa -> 2
+group ab -> List(9)
+group bc -> List(4, 5)
+group bb -> List(2)
+group aa -> List(1, 3)
+group cc -> List(6)
+group ac -> List(7, 8)
+k = ab, List(90) | List(9)
+k = cc, List(60) | List(6)
+k = bb, List(20) | List(2)
+k = ac, List(70, 80) | List(7, 8)
+2022-09-01 18:16:58 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
 ```
 
 ## RPC独立运行
@@ -111,7 +131,6 @@ runMain xyz.sourcecodestudy.spark.rpc.demo.PingClient
 [success] Total time: 5 s, completed 2022-8-27 23:02:11
 ```
 
-# TODOs（还有很多特性没有实现...）
-- 支持rpc，doing
-- 支持cache
-- 支持checkpoint
+# 实现说明
+- 不支持cache
+- 不支持checkpoint

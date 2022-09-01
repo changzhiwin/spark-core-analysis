@@ -28,8 +28,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val conf = config.clone()
 
-  val master = conf.get("spark.master", "spark://127.0.0.1:9990")
-  //val master = conf.get("spark.master", "local[2]")
+  val master = conf.get("spark.master", "spark://*") //local[2]
   
   val isLocal = master.startsWith("local")
 

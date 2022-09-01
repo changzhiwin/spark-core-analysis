@@ -70,10 +70,8 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
 
     while (true) {
       safelyCall(endpoint) {
-        logger.info(s"safelyCall process ${message}")
         message match {
           case RpcMessage(_sender, content, context) =>
-            logger.info(s"process RpcMessage sender = ${_sender}")
             try {
               endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message ${message} from ${_sender}")
@@ -85,13 +83,11 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             }
 
           case OneWayMessage(_sender, content) =>
-            logger.info(s"process OneWayMessage sender = ${_sender}")
             endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
               throw new SparkException(s"Unsupported message ${message} from ${_sender}")
             })
 
           case OnStart =>
-            logger.info(s"process OnStart")
             endpoint.onStart()
             // 是线程安全的，这个endpoint对应的Inbox允许多线程同时处理
             if (!endpoint.isInstanceOf[ThreadSafeRpcEndpoint]) {
@@ -101,7 +97,6 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             }
 
           case OnStop =>
-            logger.info(s"process OnStop")
             val activeThreads = getNumActiveThreads
             assert(activeThreads == 1, s"There should be only a single active thread but foud ${activeThreads}.")
             dispatcher.removeRpcEndpointRef(endpoint)
@@ -109,11 +104,13 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             assert(isEmpty, "OnStop should be the last message")
 
           case RemoteProcessConnected(remoteAddress) =>
-            logger.info(s"process RemoteProcessConnected ${remoteAddress}")
+            endpoint.onConnected(remoteAddress)
+
           case RemoteProcessDisconnected(remoteAddress) =>
-            logger.info(s"process RemoteProcessDisconnected ${remoteAddress}")
+            endpoint.onDisconnected(remoteAddress)
+            
           case RemoteProcessConnectionError(cause, remoteAddress) =>
-            logger.info(s"process RemoteProcessConnectionError ${remoteAddress}")
+            endpoint.onNetworkError(cause, remoteAddress)
         }
       } // end safelyCall
 

@@ -15,8 +15,6 @@ class SparkEnv(
     val conf: SparkConf
 ) extends Logging {
 
-  //var driverTmpDir: Option[String] = None
-
   var isStopped = false
 
   def stop(): Unit = {
@@ -65,8 +63,8 @@ object SparkEnv extends Logging {
       case true  => "driverSystem-rpc"
       case false => "executorSystem-rpc"
     }
-    // driver rpcEnv listen 9990, default
-    val port = conf.get("port", "9990").toInt
+    // netty rpcEnv listen
+    val port = conf.get("spark.rpc.netty-port", "9990").toInt
     val rpcEnv = RpcEnv.create(systemName, "127.0.0.1", port, conf, 1)
 
     val serializer = instantiateClass[Serializer]("spark.serializer", 

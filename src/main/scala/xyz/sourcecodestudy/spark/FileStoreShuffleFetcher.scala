@@ -13,10 +13,8 @@ class FileStoreShuffleFetcher extends ShuffleFetcher with Logging {
 
   override def fetch[T: ClassTag](shuffleId: Int, reduceId: Int, context: TaskContext, serializer: Serializer): Iterator[T] = {
 
-    //serializer的使用
-    //serializer.newInstance().deserializeStream(stream).asIterator
-
-    //怎么拿到有多少个数据分片了？老版本里面是使用MapOutputTracker记录了有多少个分片，调用getServerStatuses得到分片集合
+    //怎么拿到有多少个数据分片了？
+    //答：老版本里面是使用MapOutputTracker记录了有多少个分片，调用getServerStatuses得到分片集合
 
     val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     val ser = serializer.newInstance()
@@ -24,8 +22,8 @@ class FileStoreShuffleFetcher extends ShuffleFetcher with Logging {
     // 收集结果
     val result = ArrayBuffer[T]()
 
-    //for ((address, index) <- statuses.zipWithIndex) {
     for (index <- 0 until statuses.size) {
+      // 向每个partition中，取属于本次reduceId的数据
       val file = Utils.getShuffledOutputFile(shuffleId, index, reduceId)
 
       val in = ser.deserializeStream(new FileInputStream(file))

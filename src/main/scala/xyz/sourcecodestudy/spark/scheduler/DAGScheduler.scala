@@ -441,6 +441,8 @@ class DAGScheduler(
             }
           case smt: ShuffleMapTask  =>
             val status = result.asInstanceOf[String]
+
+            logger.info(s"ShuffleMapTask ---> (partitionId, status) = (${smt.partitionId}, ${status})")
             stage.addOutputLoc(smt.partitionId, status)
 
             // 处理stage结束
@@ -449,10 +451,11 @@ class DAGScheduler(
               runningStages -= stage
 
               if (stage.isShuffleMap) {
-                mapOutputTracker.registerMapOutputs(
-                  stage.shuffleDep.get.shuffleId,
-                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-                )
+                val shuffleId = stage.shuffleDep.get.shuffleId
+                val statuses = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
+                logger.info(s"registerMapOutputs ---> (shuffleId, outputLocs) = (${shuffleId}, ${statuses.mkString(",")})")
+
+                mapOutputTracker.registerMapOutputs(shuffleId, statuses)
               }
 
               // stage完后，如果还有没有数据的分区，那说明有异常

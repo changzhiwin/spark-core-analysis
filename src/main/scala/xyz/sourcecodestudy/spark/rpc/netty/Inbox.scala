@@ -70,9 +70,10 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
 
     while (true) {
       safelyCall(endpoint) {
+        logger.info(s"safelyCall process ${message}")
         message match {
           case RpcMessage(_sender, content, context) =>
-            logger.info(s"process RpcMessage ${_sender}")
+            logger.info(s"process RpcMessage sender = ${_sender}")
             try {
               endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message ${message} from ${_sender}")
@@ -84,7 +85,7 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
             }
 
           case OneWayMessage(_sender, content) =>
-            logger.info(s"process OneWayMessage ${_sender}")
+            logger.info(s"process OneWayMessage sender = ${_sender}")
             endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
               throw new SparkException(s"Unsupported message ${message} from ${_sender}")
             })
@@ -168,9 +169,9 @@ private class Inbox(val endpointName: String, val endpoint: RpcEndpoint) extends
         try endpoint.onError(e) catch {
           case NonFatal(ee) =>
             if (stopped) {
-              logger.debug("Ignoring error", ee)
+              logger.debug(s"Ignoring error endpoint = ${endpoint}", ee)
             } else {
-              logger.error("Ignoring error", ee)
+              logger.error(s"Ignoring error endpoint = ${endpoint}", ee)
             }
           case fatal: Throwable =>
             dealWithFatalError(fatal)

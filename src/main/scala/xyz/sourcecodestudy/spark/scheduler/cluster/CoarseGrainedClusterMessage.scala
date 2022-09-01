@@ -1,15 +1,20 @@
 package xyz.sourcecodestudy.spark.scheduler.cluster
 
-import java.nio.ByteBuffer
+//import java.nio.ByteBuffer
 
 import xyz.sourcecodestudy.spark.TaskState.TaskState
 import xyz.sourcecodestudy.spark.rpc.{RpcEndpointRef}
+import xyz.sourcecodestudy.spark.util.{SerializableBuffer}
 
 sealed trait CoarseGrainedClusterMessage extends Serializable
 
 object CoarseGrainedClusterMessage {
 
-  case class LaunchTask(taskId: Long, data: ByteBuffer) extends CoarseGrainedClusterMessage
+  case class LaunchTask(taskId: Long, data: SerializableBuffer) extends CoarseGrainedClusterMessage
+
+  case class RquestMapOut(shuffleId: Int, reduceId: Int) extends CoarseGrainedClusterMessage
+
+  case class ResponseMapOut(statuses: Seq[String]) extends CoarseGrainedClusterMessage
 
   case class KillTask(
       taskId: Long, 
@@ -30,8 +35,8 @@ object CoarseGrainedClusterMessage {
       executorId: String,
       taskId: Long,
       state: TaskState,
-      // data: SerializableBuffer, // do not know why
-      data: ByteBuffer) extends CoarseGrainedClusterMessage
+      // must use a wrapper, due to serializable
+      data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
   case object ReviveOffers extends CoarseGrainedClusterMessage
 

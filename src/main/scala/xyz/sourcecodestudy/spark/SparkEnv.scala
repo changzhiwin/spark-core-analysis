@@ -11,7 +11,7 @@ class SparkEnv(
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val shuffleFetcher: ShuffleFetcher,
-    val mapOutputTracker: MapOutputTrackerMaster,
+    val mapOutputTracker: MapOutputTracker,
     val conf: SparkConf
 ) extends Logging {
 
@@ -65,7 +65,7 @@ object SparkEnv extends Logging {
       case true  => "driverSystem-rpc"
       case false => "executorSystem-rpc"
     }
-    // driver rpcEnv listen 9990
+    // driver rpcEnv listen 9990, default
     val port = conf.get("port", "9990").toInt
     val rpcEnv = RpcEnv.create(systemName, "127.0.0.1", port, conf, 1)
 
@@ -78,7 +78,10 @@ object SparkEnv extends Logging {
     val shuffleFetcher = instantiateClass[ShuffleFetcher]("spark.shuffleFetcher", 
       "xyz.sourcecodestudy.spark.FileStoreShuffleFetcher")
 
-    val mapOutputTracker = new MapOutputTrackerMaster(conf)
+    val mapOutputTracker = isDriver match {
+      case true  => new MapOutputTrackerMaster(conf)
+      case false => new MapOutputTrackerExecutor(conf)
+    } 
 
     new SparkEnv(rpcEnv, serializer, closureSerializer, shuffleFetcher, mapOutputTracker, conf)
   }

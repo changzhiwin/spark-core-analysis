@@ -25,6 +25,8 @@ import org.apache.spark.network.server.{TransportServer, TransportServerBootstra
 import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 import org.apache.spark.network.{TransportContext}
 import java.util.concurrent.TimeoutException
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 
 class NettyRpcEnv(
     val conf: SparkConf, 
@@ -83,7 +85,9 @@ class NettyRpcEnv(
   }
 
   def send(message: RequestMessage): Unit = {
-    logger.info(s"[${message.senderAddress}] send [${message.content}], to [${message.receiver.address}]")
+
+    logger.info(s"-- [${message.senderAddress}] -> send [${message.content}], to [${message.receiver.address}], ${address}")
+
     val remoteAddr = message.receiver.address
 
     remoteAddr match {
@@ -104,6 +108,9 @@ class NettyRpcEnv(
   }
 
   def askAbortable[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): AbortableRpcFuture[T] = {
+
+    logger.info(s"-- [${message.senderAddress}] -> ask [${message.content}], to [${message.receiver.address}], ${address}")
+
     val remoteAddr = message.receiver.address
     val promise = Promise[Any]()
     var rpcMsg: Option[RpcOutboxMessage] = None
@@ -194,13 +201,17 @@ class NettyRpcEnv(
   }
 
   override def deserialize[T](deserAction: () => T): T = {
-    deserAction()
+    NettyRpcEnv.currentEnv.withValue(this) {
+      deserAction()
+    }
   }
 
   def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
-    //deserialize {
-      javaSerializerInstance.deserialize[T](bytes)
-    //}
+    NettyRpcEnv.currentClient.withValue(client) {
+      deserialize { 
+        () => javaSerializerInstance.deserialize[T](bytes)
+      }
+    }
   }
 
   override def awaitTermination(): Unit = {
@@ -241,6 +252,7 @@ class NettyRpcEnv(
   }
 
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
+    logger.info(s"postToOutbox, receiver = ${receiver}")
     // 什么场景会直接send，需要探究
     if (receiver.client != null) {
       message.sendWith(receiver.client)
@@ -315,6 +327,14 @@ class NettyRpcEnv(
   }
 }
 
+object NettyRpcEnv {
+  
+  // 反序列化时，初始化必要属性，如rpcEnv
+  val currentEnv = new scala.util.DynamicVariable[NettyRpcEnv](null)
+
+  val currentClient = new scala.util.DynamicVariable[TransportClient](null)
+}
+
 class NettyRpcEnvFactory extends RpcEnvFactory {
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
@@ -344,6 +364,16 @@ class NettyRpcEndpointRef(
     @transient private var nettyEnv: NettyRpcEnv) extends RpcEndpointRef(conf) {
 
   @transient var client: TransportClient = _
+
+  private def readObject(in: ObjectInputStream): Unit = {
+    in.defaultReadObject()
+    nettyEnv = NettyRpcEnv.currentEnv.value
+    client = NettyRpcEnv.currentClient.value
+  }
+
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    out.defaultWriteObject()
+  }
 
   override def address: Option[RpcAddress] = endpointAddress.rpcAddress
 
@@ -436,7 +466,7 @@ object RequestMessage extends Logging{
       }
       val endpointAddress = RpcEndpointAddress(readRpcAddress(in), in.readUTF())
 
-      logger.info(s"finish read action partly, endpointAddress = ${endpointAddress}")
+      //logger.info(s"finish read action partly, endpointAddress = ${endpointAddress}")
 
       val ref = new NettyRpcEndpointRef(nettyEnv.conf, endpointAddress, nettyEnv)
       ref.client = client

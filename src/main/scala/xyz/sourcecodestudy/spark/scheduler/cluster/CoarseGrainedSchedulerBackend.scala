@@ -3,15 +3,13 @@ package xyz.sourcecodestudy.spark.scheduler.cluster
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{HashMap}
-//import scala.concurrent.Future
 
 import org.apache.logging.log4j.scala.Logging
 
 import xyz.sourcecodestudy.spark.{TaskState, SparkException} //
 import xyz.sourcecodestudy.spark.rpc.{RpcAddress, RpcEnv, IsolatedRpcEndpoint, RpcCallContext}
-//import xyz.sourcecodestudy.spark.TaskState.TaskState
 import xyz.sourcecodestudy.spark.scheduler.{TaskSchedulerImpl, SchedulerBackend, WorkerOffer, TaskDescription}
-import xyz.sourcecodestudy.spark.util.{ThreadUtils, Utils}
+import xyz.sourcecodestudy.spark.util.{ThreadUtils, Utils, SerializableBuffer}
 
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv) 
     extends SchedulerBackend with Logging {
@@ -33,9 +31,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     override def onStart(): Unit = {
-      val reviveIntervalMs = 1000L // get conf TODO
-
       // 定时触发 ReviveOffers 任务
+      /*
+      val reviveIntervalMs = 30000L // get conf TODO
       reviveThread.scheduleAtFixedRate(
         () => Utils.tryLogNonFatalError {
           Option(self).foreach(_.send(ReviveOffers))
@@ -44,11 +42,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         reviveIntervalMs,
         TimeUnit.MILLISECONDS
       )
+      */
     }
 
     override def receive: PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, data)
+        // 取value，保持scheduler的接口可不变
+        scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           executorDataMap.get(executorId) match {
             case Some(executorInfo) =>
@@ -109,6 +109,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           context.reply(true)
         }
 
+      case RquestMapOut(shuffleId, reduceId) =>
+        val mapOutTracker = scheduler.sc.env.mapOutputTracker
+        if (mapOutTracker.containsShuffle(shuffleId)) {
+          val status = mapOutTracker.getServerStatuses(shuffleId, reduceId)
+          logger.info(s"Get mapOut of shuffleId =  ${shuffleId}: ${status.mkString(",")}")
+          context.reply(ResponseMapOut(status.toSeq))
+        } else{
+          context.reply(ResponseMapOut(Seq.empty[String]))
+          logger.warn(s"Driver have not shuffleId = ${shuffleId}")
+        }
+
       case StopDriver =>
         context.reply(true)
         logger.warn(s"Received ask: StopDriver")
@@ -141,6 +152,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private def makeOffers(executorId: String): Unit = {
+      logger.info(s"makeOffers executorId =${executorId}")
+
       val taskDescs = withLock {
         if (executorDataMap.contains(executorId)) {
           val executorData = executorDataMap(executorId)
@@ -160,12 +173,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
-      for (task <- tasks.flatten) {        
+      for (task <- tasks.flatten) {   
+
+        logger.info(s"launchTasks executorId = ${task.executorId}, taskId = ${task.taskId}")     
         // ignore rpc message size
         val executorData = executorDataMap(task.executorId)
         executorData.freeCores -= 1
         
-        executorData.executorEndpoint.send(LaunchTask(task.taskId, task.serializedTask))
+        executorData.executorEndpoint.send(LaunchTask(task.taskId, SerializableBuffer(task.serializedTask)))
       }
     }
 

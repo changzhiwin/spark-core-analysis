@@ -73,7 +73,9 @@ class TaskSchedulerImpl(
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
-    logger.info(s"Cancelling stage(${stageId})")
+    logger.warn(s"Cancelling stage(${stageId})")
+
+    System.exit(-1)
     
     activeTaskSets.find(_._2.stageId == stageId).foreach {
       case (_, tsm) => {
@@ -155,7 +157,7 @@ class TaskSchedulerImpl(
                   case TaskState.FINISHED =>
                     taskSetMgr.handleSuccessfulTask(taskId, new DirectTaskResult(serializedData, null))
                   case TaskState.RUNNING  =>
-                    logger.info(s"Task(${taskId}) is running state, nothing")
+                    logger.info(s"Task(${taskId}) is running state, just report")
                   case _                  =>
                     // 需要反序列化成TaskEndReason对象，当前支持了TaskKilled, ExceptionFailure
                     // TODO，反序列化有可能失败

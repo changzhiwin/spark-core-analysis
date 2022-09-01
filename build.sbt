@@ -13,7 +13,9 @@ libraryDependencies ++= Seq(
 
   "org.apache.logging.log4j" %% "log4j-api-scala" % "12.0",
   "org.apache.logging.log4j" % "log4j-api" % "2.17.2",
-  "org.apache.logging.log4j" % "log4j-core" % "2.17.2" % Runtime,
+  "org.apache.logging.log4j" % "log4j-core" % "2.17.2",
+  "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.17.2",
+
   // https://mvnrepository.com/artifact/com.google.guava/guava/31.1-jre
   "com.google.guava" % "guava" % "31.1-jre",
   // https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/util/ClosureCleaner.scala

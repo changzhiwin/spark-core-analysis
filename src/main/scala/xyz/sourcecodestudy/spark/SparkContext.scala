@@ -1,8 +1,6 @@
 package xyz.sourcecodestudy.spark
 
 import java.util.concurrent.atomic.AtomicInteger
-//import java.util.{Properties, UUID}
-//import java.util.UUID.randomUUID
 
 import org.apache.logging.log4j.scala.Logging
 import org.apache.commons.io.FileUtils
@@ -14,6 +12,7 @@ import scala.language.implicitConversions
 import xyz.sourcecodestudy.spark.rdd.{RDD, ParallelCollectionRDD, PairRDDFunctions}
 import xyz.sourcecodestudy.spark.scheduler.{TaskScheduler, TaskSchedulerImpl, DAGScheduler}
 import xyz.sourcecodestudy.spark.scheduler.local.{LocalSchedulerBackend} // LocalBackend
+import xyz.sourcecodestudy.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import xyz.sourcecodestudy.spark.util.ClosureCleaner
 
 class SparkContext(config: SparkConf) extends Logging {
@@ -22,15 +21,19 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // location of shuffle temp dir
   val file = new File("./data/shuffled")
-  if (!file.exists()) FileUtils.forceMkdir(file)
+  if (file.exists()) FileUtils.deleteDirectory(file)
+
+  // clean, then create
+  FileUtils.forceMkdir(file)
 
   val conf = config.clone()
 
-  val master = conf.get("spark.master", "local[2]")
+  val master = conf.get("spark.master", "spark://127.0.0.1:9990")
+  //val master = conf.get("spark.master", "local[2]")
   
   val isLocal = master.startsWith("local")
 
-  val env = SparkEnv.create(
+  val env: SparkEnv = SparkEnv.create(
     conf,
     isDriver = true,
     isLocal = isLocal)
@@ -116,7 +119,7 @@ object SparkContext extends Logging {
     // Regular expression used for local[N] and local[*] master formats
     val LOCAL_N_REGEX = """local\[([0-9\*]+)\]""".r
     // Regular expression for connecting to Spark deploy clusters
-    // val SPARK_REGEX = """spark://(.*)""".r
+    val SPARK_REGEX = """spark://(.*)""".r
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -134,8 +137,11 @@ object SparkContext extends Logging {
         val backend = new LocalSchedulerBackend(scheduler, threadCount) // new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
         scheduler
-      //case SPARK_REGEX(sparkUrl) =>
-        //TODO
+      case SPARK_REGEX(sparkUrl) =>
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = false)
+        val backend = new CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+        scheduler.initialize(backend)
+        scheduler
       case _ => 
         throw new SparkException(s"Not support master URL: ${master}")
     }

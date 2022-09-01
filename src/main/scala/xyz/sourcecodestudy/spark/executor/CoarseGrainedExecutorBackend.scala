@@ -8,10 +8,10 @@ import scala.util.{Success, Failure}
 
 import org.apache.logging.log4j.scala.Logging
 
-import xyz.sourcecodestudy.spark.{SparkEnv, SparkConf, TaskState}
+import xyz.sourcecodestudy.spark.{SparkEnv, SparkConf, TaskState, MapOutputTrackerExecutor}
 import xyz.sourcecodestudy.spark.rpc.{RpcEnv, RpcAddress, RpcEndpointRef, IsolatedRpcEndpoint, RpcCallContext}
 import xyz.sourcecodestudy.spark.TaskState._
-import xyz.sourcecodestudy.spark.util.ThreadUtils
+import xyz.sourcecodestudy.spark.util.{ThreadUtils, SerializableBuffer}
 import xyz.sourcecodestudy.spark.scheduler.cluster.CoarseGrainedClusterMessage._
 
 class CoarseGrainedExecutorBackend(
@@ -54,7 +54,8 @@ class CoarseGrainedExecutorBackend(
 
     case LaunchTask(taskId, data) =>
       assert(executor != None, "Received LaunchTask but no executor")
-      executor.get.launchTask(this, taskId, data)
+      // 需要取data.value，因为被包裹了一层
+      executor.get.launchTask(this, taskId, data.value)
 
     case KillTask(taskId, _, interruptThread) =>
       executor.get.killTask(taskId, interruptThread)
@@ -91,7 +92,7 @@ class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val msg = StatusUpdate(executorId, taskId, state, data)
+    val msg = StatusUpdate(executorId, taskId, state, SerializableBuffer(data))
 
     if (TaskState.isFinished(state)) {
       // Can do somethig
@@ -118,6 +119,22 @@ class CoarseGrainedExecutorBackend(
       logger.info("Skip exiting executor, already asked to exit")
     }
   }
+
+  def fetchMapOutStatuses(shuffleId: Int, reduceId: Int): Array[String] = {
+    val msg = RquestMapOut(shuffleId, reduceId)
+
+    driver match {
+      case Some(ref) => {
+        logger.info(s"Ask driver about mapout, ${msg}")
+        val response = ref.askSync[ResponseMapOut](msg)
+        logger.info(s"Ask come back, ${response}")
+        response.statuses.toArray
+      }
+      case None      => {
+        throw new IllegalStateException("Executor need request mapOut, but driver is None.")
+      }
+    }    
+  }
 }
 
 object CoarseGrainedExecutorBackend {
@@ -139,6 +156,7 @@ object CoarseGrainedExecutorBackend {
     driverConf.set("port", arguments.port.toString)
 
     val env = SparkEnv.create(driverConf, false, false)
+    SparkEnv.set(env)
 
     val backend = new CoarseGrainedExecutorBackend(
         env.rpcEnv, 
@@ -148,6 +166,7 @@ object CoarseGrainedExecutorBackend {
         arguments.cores, 
         env)
 
+    env.mapOutputTracker.asInstanceOf[MapOutputTrackerExecutor].setBackend(backend)
     env.rpcEnv.setupEndpoint("Executor", backend)
 
     env.rpcEnv.awaitTermination()

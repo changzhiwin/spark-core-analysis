@@ -13,9 +13,6 @@ object MainApp extends Logging {
 
     val sc = new SparkContext(new SparkConf(false).setAll(parseArguments(args)))
 
-    // Notice: for waiting executor connected!!!
-    Thread.sleep(90000L)
-
     logger.warn(s"Enter application, driver = ${sc.master}")
     
     val rdd0 = sc.parallelize(Seq("a", "aa", "aaa", "aaaa", "aaa", "aaa", "aa", "aaaa", "aaaa", "aaaa"), 3)

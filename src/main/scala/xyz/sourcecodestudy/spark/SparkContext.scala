@@ -47,6 +47,11 @@ class SparkContext(config: SparkConf) extends Logging {
   taskScheduler.setDAGScheduler(dagScheduler)
   taskScheduler.start()
 
+  if (!isLocal) {
+    // Notice: execute so fast, so wait little time, for executor connect.
+    Thread.sleep(60000L)
+  }
+
   def clean[F <: AnyRef](f: F): F = {
     ClosureCleaner.clean(f)
     f
@@ -112,7 +117,7 @@ class SparkContext(config: SparkConf) extends Logging {
 }
 
 object SparkContext extends Logging {
-  val SPARK_VERSION = "1.0.0-xyz"
+  val SPARK_VERSION = "0.1.2-xyz"
 
   private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
     // Regular expression used for local[N] and local[*] master formats

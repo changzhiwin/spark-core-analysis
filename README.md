@@ -1,48 +1,37 @@
-# 这个项目是干什么的
-看了许利杰老师的[这本书](https://book.douban.com/subject/35140409/)，老师在理论层面讲的比较清楚了，读起来也容易理解，但看完但总是感觉还差点什么。
-于是动手起了这个项目，定了个小目标：实现RDD的逻辑。在实操的过程中，也确实了解更多的代码细节，填补了一些盲点。
+# What's this?
+This is Scala project that imitate and rewrite Spark's RDD (core part). The main propose is full understanding the running logic of RDD, and have ablity to implement a custom version of RDD (speaking is easier than actions, we need do the hard part, right?).
 
-## 如何开始的
-> "The Spark core engine itself has changed little since it was first released" -- Spark The Definitive Guide
+# How to move the first step?
+> "The Spark core engine itself has changed little since it was first released." -- Spark The Definitive Guide
 
-说实话，直接从最新的代码库开始，是有些困难的（代码量庞大）；而且core部分理念变化不大，如是找了较老的版本来开始，参考了如下两个
-- [commit](https://github.com/apache/spark/tree/5b021ce0990ec675afc6939cc2c06f041c973d17)
-- [tag v1.0.0](https://github.com/apache/spark/tree/v1.0.0/)
+Fully Spark project is very big and complicated. So I just only focus on RDD's logic, and the source code part is in the `core` dir. Unfortunately, it's still difficult. Then, I do two things, make life easier:
+- Find a good teacher, Lijie Xu, who have a book about the design of Spark. The book is very easy to understand and the detail is very clear.
+- Find history versions, that have less codes
+  - [commit](https://github.com/apache/spark/tree/5b021ce0990ec675afc6939cc2c06f041c973d17)
+  - [tag v1.0.0](https://github.com/apache/spark/tree/v1.0.0/)
 
-## 运行环境
+# Implement detail
+
+## Features
+- Partition, Shuffle
+- Job/Stage/Task, mapping to logic/physical plan
+- Rpc module, basic on Netty framework
+- Running mode, local and multi-process(multi executor)
+- ~~Cache~~, not support
+- ~~Checkpoint~~, not support
+
+## Abstract perspective
+You will better understant the boundary between the `Driver` and `Executor`.
+### Run local
+![rdd-running-local](./doc/img/rdd-running-local.png)
+### Run multi-process
+![rdd-running-cluster](./doc/img/rdd-running-cluster.png)
+# How to run
+## Enviroment
 - Java 1.8
 - Scala 2.13.8
-```
-git checkout v0.1.2-cluster-support
 
-// open terminal 1, run driver process and wait
->sbt run
-
-// open terminal 2, run executor process 1
->sbt
->runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
-
-// open terminal 3, run executor process 2
->sbt
->runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
-```
-
-## 有什么用
-用于源码学习，一个轻量（阉割版）、容易运行的Spark Core。成熟的大型开源项目，往往非常庞大，依赖关系错综复杂，直接源码运行是非常有挑战的，阻碍了很多同学深入研究的第一步。
-这个项目只依赖`JDK1.8`和`Scala2.13`，就可以run起来；但却完整实现了RDD的核心逻辑，大幅降低深入研究源码的门槛。有了这个基础，再挑战master，相信信心倍增（这也正是作者实践的逻辑）。
-
-# 当前提供的输出
-
-## RDD的运行逻辑
-![rdd-running-logic](./doc/img/rdd-running-logic.png)
-
-## RPC实现的逻辑
-![rpc-framework](./doc/img/rpc-framework.png)
-## 实现的程度
-- 目前单机单进程、单机多进程（1 Driver + n Executor）模式运行
-- 完整的RDD核心逻辑（DGA、Shuffle、Aggregator）
-- rpc模块独立运行
-- cluster模式采用多进程模拟
+## Entry point
 ```
 // MainApp.scala
 def main(args: Array[String]) = {
@@ -65,25 +54,21 @@ def main(args: Array[String]) = {
   
   sc.stop()
 }
+```
 
-// Driver Output
-[info] running xyz.sourcecodestudy.spark.MainApp 
-2022-09-01 18:16:57 WARN MainApp$: Enter application, driver = spark://*
-[success] Total time: 73 s (01:13), completed 2022-9-1 18:16:58
+## Local mode
+```
+// open terminal
+>sbt
+>run --master local[2]
 
-// Executor 1 Output
-[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
-[success] Total time: 13 s, completed 2022-9-1 18:16:11
+--------------------------------------------------------------
+// Console Output
+2022-09-06 16:48:02 WARN MainApp$: Enter application, driver = local[2]
+2022-09-06 16:48:02 WARN LocalEndpoint: start local endpoint.
 count aaaa -> 4
 count a -> 1
 count aaa -> 3
-k = aa, List(10, 30) | List(1, 3)
-k = bc, List(40, 50) | List(4, 5)
-2022-09-01 18:16:58 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
-
-// Executor 2 Output
-[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
-[success] Total time: 11 s, completed 2022-9-1 18:16:12
 count aa -> 2
 group ab -> List(9)
 group bc -> List(4, 5)
@@ -95,42 +80,55 @@ k = ab, List(90) | List(9)
 k = cc, List(60) | List(6)
 k = bb, List(20) | List(2)
 k = ac, List(70, 80) | List(7, 8)
-2022-09-01 18:16:58 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
+k = aa, List(10, 30) | List(1, 3)
+k = bc, List(40, 50) | List(4, 5)
+[success] Total time: 11 s, completed 2022-9-6 16:48:03
 ```
 
-## RPC独立运行
-1，获取相应的tag
+## Multi-process mode
+**Notice**: The different output of `Driver`, and two `Executor`.
 ```
-git checkout v0.1.1-rpc-independent
-```
+// open terminal 1, run driver process and wait
+>sbt run
 
-2，打开第一个终端
-```
-sbt
-runMain xyz.sourcecodestudy.spark.rpc.demo.PongServer
+// open terminal 2, run executor process 1
+>sbt
+>runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
 
-// Output
-2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive secret: Hi, I am PingClient.
-2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 2
-2022-08-27 23:02:11 WARN PingPongEndpoint: [pingpong-endpoint] receive question: 1
+// open terminal 3, run executor process 2
+>sbt
+>runMain xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend  --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
 
-```
-3，打开第二个终端
-```
-sbt
-runMain xyz.sourcecodestudy.spark.rpc.demo.PingClient
+--------------------------------------------------------------
 
-// Output
-2022-08-27 23:02:11 INFO Inbox: process OnStart
-2022-08-27 23:02:11 INFO NettyRpcEnv: [127.0.0.1:9992] send [Notify(Hi, I am PingClient.)], to [Some(127.0.0.1:9991)]
-2022-08-27 23:02:11 INFO RpcEndpointVerifier: [endpoint-verifier] stared
-2022-08-27 23:02:11 INFO Dispatcher: postMessage endpointName = endpoint-verifier
-2022-08-27 23:02:11 INFO Inbox: process RemoteProcessConnected 127.0.0.1:9991
-2022-08-27 23:02:11 INFO PingClient$: onComplete result = Pong(banana)
-2022-08-27 23:02:11 INFO PingClient$: Get answer: Pong(apple)
-[success] Total time: 5 s, completed 2022-8-27 23:02:11
-```
+// Driver Output
+[info] running xyz.sourcecodestudy.spark.MainApp 
+2022-09-06 17:26:43 WARN MainApp$: Enter application, driver = spark://*
+[success] Total time: 73 s (01:13), completed 2022-9-6 17:26:44
 
-# 实现说明
-- 不支持cache
-- 不支持checkpoint
+// Executor 1 Output
+[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 13 --hostname spark://127.0.0.1:9993 --port 9993
+count aa -> 2
+count aaa -> 3
+group ab -> List(9)
+group bc -> List(4, 5)
+k = aa, List(10, 30) | List(1, 3)
+k = bc, List(40, 50) | List(4, 5)
+2022-09-06 17:26:44 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
+[success] Total time: 46 s, completed 2022-9-6 17:26:44
+
+// Executor 2 Output
+[info] running xyz.sourcecodestudy.spark.executor.CoarseGrainedExecutorBackend --executor-id 18 --hostname spark://127.0.0.1:9998 --port 9998
+count aaaa -> 4
+count a -> 1
+group bb -> List(2)
+group aa -> List(1, 3)
+group cc -> List(6)
+group ac -> List(7, 8)
+k = bb, List(20) | List(2)
+k = ac, List(70, 80) | List(7, 8)
+k = ab, List(90) | List(9)
+k = cc, List(60) | List(6)
+2022-09-06 17:26:44 WARN CoarseGrainedExecutorBackend: Code(1), Executor self-exiting due to Driver 127.0.0.1:9990 disassociated! Shutting down.
+[success] Total time: 52 s, completed 2022-9-6 17:26:44
+```

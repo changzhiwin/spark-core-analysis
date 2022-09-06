@@ -80,7 +80,7 @@ class CoarseGrainedExecutorBackend(
           
           env.stop()
         }
-      }
+      }.start()
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -174,7 +174,7 @@ object CoarseGrainedExecutorBackend {
     env.mapOutputTracker.asInstanceOf[MapOutputTrackerExecutor].setBackend(backend)
     env.rpcEnv.setupEndpoint("Executor", backend)
 
-    // env.rpcEnv.awaitTermination()
+    env.awaitTermination()
   }
 
   private def parseArguments(args: Array[String]): Arguments = {

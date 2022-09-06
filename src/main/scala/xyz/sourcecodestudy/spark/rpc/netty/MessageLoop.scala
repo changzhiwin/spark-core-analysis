@@ -33,8 +33,8 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
         threadpool.shutdown()
         stopped = true
       }
-    }
-    threadpool.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
+    } 
+    // threadpool.awaitTermination(Long.MaxValue, TimeUnit.MILLISECONDS)
   }
 
   protected final def setActive(inbox: Inbox): Unit = active.offer(inbox)
